@@ -286,10 +286,39 @@ def render_dashboard(df):
 # 5. UI Components (Main Structure)
 # ==========================================
 
-menu = ["📝 Data Entry (Admin View)", "✏️ Edit/Delete (Admin View)", "📊 Dashboard (User View)"]
-choice = st.sidebar.selectbox("เมนูนำทาง", menu)
+# ระบบล็อกรหัสผ่านสำหรับ Admin
+if "is_admin" not in st.session_state:
+    st.session_state["is_admin"] = False
 
-if choice == "📝 Data Entry (Admin View)":
+with st.sidebar:
+    st.markdown("### 🔐 เข้าสู่ระบบ Admin")
+    if not st.session_state["is_admin"]:
+        password_input = st.text_input("รหัสผ่านจัดการข้อมูล", type="password")
+        # ใช้รหัสผ่านจาก Streamlit Secrets (ถ้าไม่มีให้ใช้ nacc1234 เป็นค่าเริ่มต้น)
+        correct_password = st.secrets.get("admin_password", "nacc1234")
+        if st.button("เข้าสู่ระบบ"):
+            if password_input == correct_password:
+                st.session_state["is_admin"] = True
+                st.rerun()
+            elif password_input != "":
+                st.error("รหัสผ่านไม่ถูกต้อง")
+    else:
+        st.success("✅ สถานะ: Admin")
+        if st.button("ออกจากระบบ"):
+            st.session_state["is_admin"] = False
+            st.rerun()
+            
+    st.divider()
+    
+    # ถ้าเป็น Admin จะเห็นครบ 3 เมนู, ถ้าไม่ใช่จะเห็นแค่ Dashboard
+    if st.session_state["is_admin"]:
+        menu = ["📊 Dashboard (User View)", "📝 Data Entry (Admin View)", "✏️ Edit/Delete (Admin View)"]
+    else:
+        menu = ["📊 Dashboard (User View)"]
+        
+    choice = st.radio("เมนูนำทาง", menu)
+
+if choice == "📝 Data Entry (Admin View)" and st.session_state["is_admin"]:
     st.header("📝 ระบบจัดการภารกิจรักษาความปลอดภัย (Admin)")
     df = get_data()
     
@@ -345,7 +374,7 @@ if choice == "📝 Data Entry (Admin View)":
         st.subheader("📊 สถิติการปฏิบัติงาน")
         render_dashboard(df)
 
-elif choice == "✏️ Edit/Delete (Admin View)":
+elif choice == "✏️ Edit/Delete (Admin View)" and st.session_state["is_admin"]:
     st.header("แก้ไข / ลบ ข้อมูลภารกิจ")
     df = get_data()
     if not df.empty:
