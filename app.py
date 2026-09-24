@@ -284,24 +284,24 @@ def render_dashboard(df):
         
         styled_html = f"""
         <style>
-            .custom-table {
+            .custom-table {{
                 width: 100%;
                 border-collapse: collapse;
                 font-family: sans-serif;
                 font-size: 14px;
-            }
-            .custom-table th {
+            }}
+            .custom-table th {{
                 background-color: #f0f2f6;
                 color: #31333F;
                 text-align: left;
                 padding: 10px;
                 border-bottom: 2px solid #e1e4e8;
-            }
-            .custom-table td {
+            }}
+            .custom-table td {{
                 padding: 10px;
                 border-bottom: 1px solid #e1e4e8;
                 vertical-align: top;
-            }
+            }}
         </style>
         <div style="overflow-x: auto;">
             {table_html.replace('<table border="1" class="dataframe">', '<table class="custom-table">')}
