@@ -226,6 +226,44 @@ def render_dashboard(df):
             
         st.divider()
         
+        # ==========================================
+        # งานที่กำลังจะมาถึง (Upcoming Missions)
+        # ==========================================
+        st.subheader("🚀 งานที่กำลังจะมาถึง (Upcoming Missions)")
+        
+        today = datetime.today().date()
+        upcoming_df = df_filtered.copy()
+        upcoming_df['Date_Obj_DateOnly'] = pd.to_datetime(upcoming_df['Date'], errors='coerce').dt.date
+        upcoming_df = upcoming_df[upcoming_df['Date_Obj_DateOnly'] >= today]
+        
+        # เรียงลำดับจากวันที่ใกล้จะถึงที่สุดขึ้นก่อน (Ascending)
+        upcoming_df = upcoming_df.sort_values(by=['Date', 'Time'], ascending=[True, True])
+        
+        if not upcoming_df.empty:
+            upcoming_display = upcoming_df[['Date', 'Time', 'Mission Name', 'Officers']].copy()
+            upcoming_display['Date'] = upcoming_display['Date'].apply(to_thai_date)
+            upcoming_display.rename(columns={
+                "Date": "วันที่",
+                "Time": "เวลา",
+                "Mission Name": "ชื่อภารกิจ",
+                "Officers": "เจ้าหน้าที่ปฏิบัติงาน"
+            }, inplace=True)
+            
+            st.dataframe(
+                upcoming_display,
+                column_config={
+                    "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
+                    "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("🎉 ไม่มีภารกิจที่กำลังจะมาถึงในช่วงเวลานี้")
+            
+        st.divider()
+        st.subheader("🏆 สถิติการปฏิบัติงาน (Leaderboard)")
+        
         stats = []
         for officer in OFFICERS:
             officer_missions = df_filtered[df_filtered['Officers'].fillna('').str.contains(officer)]
