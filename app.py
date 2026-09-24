@@ -108,6 +108,30 @@ def to_thai_month_year(date_str_yyyy_mm):
     except:
         return date_str_yyyy_mm
         
+def is_outside_hours(t_val):
+    if pd.isna(t_val) or str(t_val).strip() == "": return False
+    try:
+        if isinstance(t_val, str):
+            t_obj = datetime.strptime(str(t_val)[:8], '%H:%M:%S').time()
+        else:
+            t_obj = t_val
+        t_start = datetime.strptime("08:30", "%H:%M").time()
+        t_end = datetime.strptime("16:30", "%H:%M").time()
+        return t_obj < t_start or t_obj > t_end
+    except: return False
+
+def is_inside_hours(t_val):
+    if pd.isna(t_val) or str(t_val).strip() == "": return True
+    try:
+        if isinstance(t_val, str):
+            t_obj = datetime.strptime(str(t_val)[:8], '%H:%M:%S').time()
+        else:
+            t_obj = t_val
+        t_start = datetime.strptime("08:30", "%H:%M").time()
+        t_end = datetime.strptime("16:30", "%H:%M").time()
+        return t_start <= t_obj <= t_end
+    except: return True
+        
 def thai_date_picker(label, default_date=None, key_prefix=""):
     st.markdown(f'<p style="font-size:14px; margin-bottom:5px;">{label}</p>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
@@ -268,13 +292,18 @@ def render_dashboard(df):
         for officer in OFFICERS:
             officer_missions = df_filtered[df_filtered['Officers'].fillna('').str.contains(officer)]
             total_missions = len(officer_missions)
-            normal_days = len(officer_missions[officer_missions['Day Type'] == 'วันทำงานปกติ'])
+            
+            normal_missions = officer_missions[officer_missions['Day Type'] == 'วันทำงานปกติ']
+            normal_inside = len(normal_missions[normal_missions['Time'].apply(is_inside_hours)])
+            normal_outside = len(normal_missions[normal_missions['Time'].apply(is_outside_hours)])
+            
             holiday_days = len(officer_missions[officer_missions['Day Type'] == 'วันหยุด'])
             reports_done = len(df_filtered[df_filtered['Reporter'] == officer])
             stats.append({
                 "ชื่อเจ้าหน้าที่": officer,
                 "รวม": total_missions,
-                "ปกติ": normal_days,
+                "ปกติ (ในเวลา)": normal_inside,
+                "ปกติ (นอกเวลา)": normal_outside,
                 "วันหยุด": holiday_days,
                 "ทำรายงาน": reports_done
             })
@@ -288,15 +317,21 @@ def render_dashboard(df):
         def highlight_min_blue(s):
             is_min = s == s.min()
             return ['background-color: #cce5ff; color: black' if v else '' for v in is_min]
+            
+        def highlight_min_yellow(s):
+            is_min = s == s.min()
+            return ['background-color: #ffffe0; color: black' if v else '' for v in is_min]
 
         styled_df = (stats_df.style
                      .apply(highlight_min_red, subset=['วันหยุด'])
-                     .apply(highlight_min_blue, subset=['ทำรายงาน']))
+                     .apply(highlight_min_blue, subset=['ทำรายงาน'])
+                     .apply(highlight_min_yellow, subset=['ปกติ (นอกเวลา)']))
         
         st.dataframe(styled_df, use_container_width=True, hide_index=True, height=500)
         
         st.markdown("""
         **คำอธิบายสีไฮไลท์ (ชี้เป้าคนที่ทำงานน้อยที่สุด):**
+        - <span style="background-color:#ffffe0; color:black; padding:2px 5px;"> สีเหลืองอ่อน </span>: ผู้ที่มีสถิติออกเวร **ปกติ (นอกเวลา)** น้อยที่สุด
         - <span style="background-color:#ffcccc; color:black; padding:2px 5px;"> สีแดงอ่อน </span>: ผู้ที่มีสถิติออกเวร **วันหยุด** น้อยที่สุด
         - <span style="background-color:#cce5ff; color:black; padding:2px 5px;"> สีฟ้าอ่อน </span>: ผู้ที่มีสถิติ **การทำรายงาน** น้อยที่สุด
         """, unsafe_allow_html=True)
@@ -381,22 +416,36 @@ if choice == "📝 Data Entry (Admin View)" and st.session_state["is_admin"]:
         time_val = st.time_input("เวลานัดหมาย / เวลาปฏิบัติงาน")
         day_type = st.selectbox("ประเภทวัน", DAY_TYPES)
         
+        is_outside = is_outside_hours(time_val)
+        
         officer_stats = {}
         for officer in OFFICERS:
             if not df.empty:
-                count = len(df[(df['Officers'].fillna('').str.contains(officer)) & (df['Day Type'] == day_type)])
+                officer_df = df[df['Officers'].fillna('').str.contains(officer)]
+                if day_type == "วันหยุด":
+                    count = len(officer_df[officer_df['Day Type'] == "วันหยุด"])
+                    stat_label = "วันหยุด"
+                else:
+                    if is_outside:
+                        count = len(officer_df[(officer_df['Day Type'] == 'วันทำงานปกติ') & (officer_df['Time'].apply(is_outside_hours))])
+                        stat_label = "ปกติ (นอกเวลา)"
+                    else:
+                        count = len(officer_df[(officer_df['Day Type'] == 'วันทำงานปกติ') & (officer_df['Time'].apply(is_inside_hours))])
+                        stat_label = "ปกติ (ในเวลา)"
             else:
                 count = 0
+                stat_label = "วันหยุด" if day_type == "วันหยุด" else ("ปกติ (นอกเวลา)" if is_outside else "ปกติ (ในเวลา)")
+            
             officer_stats[officer] = count
             
         sorted_officers = sorted(officer_stats.items(), key=lambda x: x[1])
         
-        if day_type == "วันหยุด":
+        if day_type == "วันหยุด" or (day_type == "วันทำงานปกติ" and is_outside):
             top_3 = sorted_officers[:3]
             suggestion_text = ", ".join([f"**{name}** ({count} ครั้ง)" for name, count in top_3])
-            st.info(f"💡 **Smart Suggestion:** ผู้ที่มีสถิติ **{day_type}** น้อยที่สุด 3 อันดับแรก คือ {suggestion_text}")
+            st.info(f"💡 **Smart Suggestion:** ผู้ที่มีสถิติ **{stat_label}** น้อยที่สุด 3 อันดับแรก คือ {suggestion_text}")
             
-        dynamic_officer_options = [f"{name} ({day_type}: {count} ครั้ง)" for name, count in officer_stats.items()]
+        dynamic_officer_options = [f"{name} ({stat_label}: {count} ครั้ง)" for name, count in officer_stats.items()]
         selected_dynamic_officers = st.multiselect("เจ้าหน้าที่ปฏิบัติงาน", dynamic_officer_options)
         
         reporter_options = selected_dynamic_officers if selected_dynamic_officers else ["กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน"]
