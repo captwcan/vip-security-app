@@ -276,8 +276,15 @@ def render_dashboard(df):
             "Officers": "เจ้าหน้าที่ปฏิบัติงาน",
             "Reporter": "ผู้ทำรายงานผล"
         }, inplace=True)
-        
-        st.dataframe(history_df, use_container_width=True, hide_index=True)
+        st.dataframe(
+            history_df,
+            column_config={
+                "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
+                "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
         
     else:
         st.info("ยังไม่มีข้อมูลสำหรับแสดงสถิติ กรุณาบันทึกข้อมูลก่อน")
