@@ -334,7 +334,7 @@ if choice == "📝 Data Entry (Admin View)" and st.session_state["is_admin"]:
     with col_left:
         st.subheader("✍️ ฟอร์มบันทึกภารกิจ")
         
-        mission_name = st.text_input("ชื่อภารกิจ")
+        mission_name = st.text_area("ชื่อภารกิจ", height=100)
         
         date, date_error = thai_date_picker("วันที่ปฏิบัติงาน", key_prefix="entry")
         if date_error:
@@ -396,7 +396,7 @@ elif choice == "✏️ Edit/Delete (Admin View)" and st.session_state["is_admin"
         selected_data = df.iloc[idx]
         mission_id = selected_data['Mission ID']
         
-        new_name = st.text_input("ชื่อภารกิจ", value=selected_data['Mission Name'])
+        new_name = st.text_area("ชื่อภารกิจ", value=selected_data['Mission Name'], height=100)
         
         try:
             current_date = datetime.strptime(str(selected_data['Date']), '%Y-%m-%d').date()
