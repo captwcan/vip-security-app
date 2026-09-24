@@ -18,8 +18,7 @@ OFFICERS = [
     "นายณัฐนันท์ อำม์พรพันธ์", "นายกมลนัทธ์ ศักดิ์สุวรรณ", "นายกฤตภาส เอี่ยมศรี"
 ]
 
-# ยุบรวมประเภทวันหยุด
-DAY_TYPES = ["วันทำงานปกติ", "วันหยุด"]
+DAY_TYPES = ["วันทำงานปกติ (ในเวลา)", "วันทำงานปกติ (นอกเวลา)", "วันหยุด"]
 
 THAI_MONTHS = [
     "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -76,9 +75,10 @@ def get_data():
         elif df.empty:
             df = pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter"])
         
-        # จัดการข้อมูลเก่าใน DB ให้เป็นประเภท "วันหยุด" หากเป็นเสาร์อาทิตย์หรือนักขัตฤกษ์
+        # จัดการข้อมูลเก่าใน DB ให้ตรงกับประเภทใหม่
         if not df.empty and 'Day Type' in df.columns:
             df['Day Type'] = df['Day Type'].replace(["วันหยุดเสาร์-อาทิตย์", "วันหยุดนักขัตฤกษ์"], "วันหยุด")
+            df['Day Type'] = df['Day Type'].replace(["วันทำงานปกติ"], "วันทำงานปกติ (ในเวลา)")
             
         return df
 
@@ -107,30 +107,6 @@ def to_thai_month_year(date_str_yyyy_mm):
         return f"{THAI_MONTHS[int(m)]} {int(y) + 543}"
     except:
         return date_str_yyyy_mm
-        
-def is_outside_hours(t_val):
-    if pd.isna(t_val) or str(t_val).strip() == "": return False
-    try:
-        if isinstance(t_val, str):
-            t_obj = datetime.strptime(str(t_val)[:8], '%H:%M:%S').time()
-        else:
-            t_obj = t_val
-        t_start = datetime.strptime("08:30", "%H:%M").time()
-        t_end = datetime.strptime("16:30", "%H:%M").time()
-        return t_obj < t_start or t_obj > t_end
-    except: return False
-
-def is_inside_hours(t_val):
-    if pd.isna(t_val) or str(t_val).strip() == "": return True
-    try:
-        if isinstance(t_val, str):
-            t_obj = datetime.strptime(str(t_val)[:8], '%H:%M:%S').time()
-        else:
-            t_obj = t_val
-        t_start = datetime.strptime("08:30", "%H:%M").time()
-        t_end = datetime.strptime("16:30", "%H:%M").time()
-        return t_start <= t_obj <= t_end
-    except: return True
         
 def thai_date_picker(label, default_date=None, key_prefix=""):
     st.markdown(f'<p style="font-size:14px; margin-bottom:5px;">{label}</p>', unsafe_allow_html=True)
@@ -293,9 +269,8 @@ def render_dashboard(df):
             officer_missions = df_filtered[df_filtered['Officers'].fillna('').str.contains(officer)]
             total_missions = len(officer_missions)
             
-            normal_missions = officer_missions[officer_missions['Day Type'] == 'วันทำงานปกติ']
-            normal_inside = len(normal_missions[normal_missions['Time'].apply(is_inside_hours)])
-            normal_outside = len(normal_missions[normal_missions['Time'].apply(is_outside_hours)])
+            normal_inside = len(officer_missions[officer_missions['Day Type'] == 'วันทำงานปกติ (ในเวลา)'])
+            normal_outside = len(officer_missions[officer_missions['Day Type'] == 'วันทำงานปกติ (นอกเวลา)'])
             
             holiday_days = len(officer_missions[officer_missions['Day Type'] == 'วันหยุด'])
             reports_done = len(df_filtered[df_filtered['Reporter'] == officer])
@@ -416,36 +391,22 @@ if choice == "📝 Data Entry (Admin View)" and st.session_state["is_admin"]:
         time_val = st.time_input("เวลานัดหมาย / เวลาปฏิบัติงาน")
         day_type = st.selectbox("ประเภทวัน", DAY_TYPES)
         
-        is_outside = is_outside_hours(time_val)
-        
         officer_stats = {}
         for officer in OFFICERS:
             if not df.empty:
-                officer_df = df[df['Officers'].fillna('').str.contains(officer)]
-                if day_type == "วันหยุด":
-                    count = len(officer_df[officer_df['Day Type'] == "วันหยุด"])
-                    stat_label = "วันหยุด"
-                else:
-                    if is_outside:
-                        count = len(officer_df[(officer_df['Day Type'] == 'วันทำงานปกติ') & (officer_df['Time'].apply(is_outside_hours))])
-                        stat_label = "ปกติ (นอกเวลา)"
-                    else:
-                        count = len(officer_df[(officer_df['Day Type'] == 'วันทำงานปกติ') & (officer_df['Time'].apply(is_inside_hours))])
-                        stat_label = "ปกติ (ในเวลา)"
+                count = len(df[(df['Officers'].fillna('').str.contains(officer)) & (df['Day Type'] == day_type)])
             else:
                 count = 0
-                stat_label = "วันหยุด" if day_type == "วันหยุด" else ("ปกติ (นอกเวลา)" if is_outside else "ปกติ (ในเวลา)")
-            
             officer_stats[officer] = count
             
         sorted_officers = sorted(officer_stats.items(), key=lambda x: x[1])
         
-        if day_type == "วันหยุด" or (day_type == "วันทำงานปกติ" and is_outside):
+        if day_type == "วันหยุด" or day_type == "วันทำงานปกติ (นอกเวลา)":
             top_3 = sorted_officers[:3]
             suggestion_text = ", ".join([f"**{name}** ({count} ครั้ง)" for name, count in top_3])
-            st.info(f"💡 **Smart Suggestion:** ผู้ที่มีสถิติ **{stat_label}** น้อยที่สุด 3 อันดับแรก คือ {suggestion_text}")
+            st.info(f"💡 **Smart Suggestion:** ผู้ที่มีสถิติ **{day_type}** น้อยที่สุด 3 อันดับแรก คือ {suggestion_text}")
             
-        dynamic_officer_options = [f"{name} ({stat_label}: {count} ครั้ง)" for name, count in officer_stats.items()]
+        dynamic_officer_options = [f"{name} ({day_type}: {count} ครั้ง)" for name, count in officer_stats.items()]
         selected_dynamic_officers = st.multiselect("เจ้าหน้าที่ปฏิบัติงาน", dynamic_officer_options)
         
         reporter_options = selected_dynamic_officers if selected_dynamic_officers else ["กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน"]
