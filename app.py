@@ -276,15 +276,38 @@ def render_dashboard(df):
             "Officers": "เจ้าหน้าที่ปฏิบัติงาน",
             "Reporter": "ผู้ทำรายงานผล"
         }, inplace=True)
-        st.dataframe(
-            history_df,
-            column_config={
-                "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
-                "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large")
-            },
-            use_container_width=True,
-            hide_index=True
-        )
+        # แปลง \n เป็น <br> เพื่อให้ขึ้นบรรทัดใหม่ได้
+        history_df['ชื่อภารกิจ'] = history_df['ชื่อภารกิจ'].astype(str).str.replace('\n', '<br>')
+        
+        # สร้างตารางด้วย HTML เพื่อให้รองรับข้อความยาวๆ และตัดบรรทัดได้จริง
+        table_html = history_df.to_html(escape=False, index=False, justify='left')
+        
+        styled_html = f"""
+        <style>
+            .custom-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: sans-serif;
+                font-size: 14px;
+            }
+            .custom-table th {
+                background-color: #f0f2f6;
+                color: #31333F;
+                text-align: left;
+                padding: 10px;
+                border-bottom: 2px solid #e1e4e8;
+            }
+            .custom-table td {
+                padding: 10px;
+                border-bottom: 1px solid #e1e4e8;
+                vertical-align: top;
+            }
+        </style>
+        <div style="overflow-x: auto;">
+            {table_html.replace('<table border="1" class="dataframe">', '<table class="custom-table">')}
+        </div>
+        """
+        st.markdown(styled_html, unsafe_allow_html=True)
         
     else:
         st.info("ยังไม่มีข้อมูลสำหรับแสดงสถิติ กรุณาบันทึกข้อมูลก่อน")
