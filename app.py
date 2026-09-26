@@ -65,6 +65,7 @@ def init_connection_v3():
 
 sheet = init_connection_v3()
 
+@st.cache_data(ttl=60)
 def get_data():
     if sheet is None:
         return pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details", "Approval Status"])
@@ -166,6 +167,7 @@ def add_mission(name, date, time_val, day_type, officers, reporter):
     row = [mission_id, name, str(date), str(time_val), day_type, officers_str, clean_reporter, "ยังไม่ส่ง", "", approval_status]
     
     sheet.append_row(row)
+    st.cache_data.clear()
     st.success("บันทึกข้อมูลลง Google Sheets สำเร็จ!")
 
 def update_mission(mission_id, name, date, time_val, day_type, officers, reporter):
@@ -181,6 +183,7 @@ def update_mission(mission_id, name, date, time_val, day_type, officers, reporte
     if cell:
         row_idx = cell.row
         sheet.update(f"B{row_idx}:G{row_idx}", [[name, str(date), str(time_val), day_type, officers_str, clean_reporter]])
+        st.cache_data.clear()
         st.success("อัปเดตข้อมูลใน Google Sheets สำเร็จ!")
 
 def approve_mission(mission_id):
@@ -192,6 +195,7 @@ def approve_mission(mission_id):
     if cell:
         row_idx = cell.row
         sheet.update(f"J{row_idx}", [["อนุมัติแล้ว"]])
+        st.cache_data.clear()
 
 def update_mission_details(mission_id, status, details):
     if not sheet:
@@ -203,6 +207,7 @@ def update_mission_details(mission_id, status, details):
         row_idx = cell.row
         sheet.update_cell(row_idx, 8, str(status))
         sheet.update_cell(row_idx, 9, str(details))
+        st.cache_data.clear()
 
 def delete_mission(mission_id):
     if not sheet:
@@ -212,6 +217,7 @@ def delete_mission(mission_id):
     cell = sheet.find(mission_id)
     if cell:
         sheet.delete_rows(cell.row)
+        st.cache_data.clear()
         st.success("ลบข้อมูลจาก Google Sheets สำเร็จ!")
 
 # ==========================================
@@ -359,6 +365,7 @@ def render_dashboard(df):
         st.subheader("📋 ตารางแสดงประวัติภารกิจ (ตามช่วงเวลาที่เลือก)")
         
         history_df = df_filtered[['Mission ID', 'Mission Name', 'Date', 'Time', 'Day Type', 'Officers', 'Reporter', 'Report Status', 'Additional Details']].copy()
+        history_df.reset_index(drop=True, inplace=True)
         history_df['Date'] = history_df['Date'].apply(to_thai_date)
         history_df.rename(columns={
             "Mission Name": "ชื่อภารกิจ",
