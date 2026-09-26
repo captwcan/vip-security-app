@@ -67,7 +67,7 @@ sheet = init_connection_v3()
 
 def get_data():
     if sheet is None:
-        return pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details"])
+        return pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details", "Approval Status"])
     else:
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
@@ -75,8 +75,9 @@ def get_data():
             if 'Time' not in df.columns: df['Time'] = ''
             if 'Report Status' not in df.columns: df['Report Status'] = 'ยังไม่ส่ง'
             if 'Additional Details' not in df.columns: df['Additional Details'] = ''
+            if 'Approval Status' not in df.columns: df['Approval Status'] = 'อนุมัติแล้ว'
         else:
-            df = pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details"])
+            df = pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details", "Approval Status"])
         
         # จัดการข้อมูลเก่าใน DB ให้ตรงกับประเภทใหม่
         if not df.empty and 'Day Type' in df.columns:
@@ -157,7 +158,12 @@ def add_mission(name, date, time_val, day_type, officers, reporter):
     clean_reporter = reporter.split(" (")[0] if reporter else ""
     
     officers_str = ", ".join(clean_officers)
-    row = [mission_id, name, str(date), str(time_val), day_type, officers_str, clean_reporter, "ยังไม่ส่ง", ""]
+    
+    # Logic การอนุมัติ
+    today = datetime.today().date()
+    approval_status = "รอเห็นชอบ" if date > today else "อนุมัติแล้ว"
+    
+    row = [mission_id, name, str(date), str(time_val), day_type, officers_str, clean_reporter, "ยังไม่ส่ง", "", approval_status]
     
     sheet.append_row(row)
     st.success("บันทึกข้อมูลลง Google Sheets สำเร็จ!")
@@ -176,6 +182,16 @@ def update_mission(mission_id, name, date, time_val, day_type, officers, reporte
         row_idx = cell.row
         sheet.update(f"B{row_idx}:G{row_idx}", [[name, str(date), str(time_val), day_type, officers_str, clean_reporter]])
         st.success("อัปเดตข้อมูลใน Google Sheets สำเร็จ!")
+
+def approve_mission(mission_id):
+    if not sheet:
+        st.error("ไม่สามารถอัปเดตได้: ยังไม่ได้เชื่อมต่อ Google Sheets")
+        return
+        
+    cell = sheet.find(mission_id)
+    if cell:
+        row_idx = cell.row
+        sheet.update(f"J{row_idx}", [["อนุมัติแล้ว"]])
 
 def update_mission_details(mission_id, status, details):
     if not sheet:
@@ -204,7 +220,11 @@ def render_dashboard(df):
     if not df.empty:
         filter_type = st.radio("มุมมองข้อมูล", ["สถิติสะสม (All-time)", "สถิติรายเดือน (Monthly)"], horizontal=True)
         
-        df_filtered = df.copy()
+        df_filtered = df[df['Approval Status'] == 'อนุมัติแล้ว'].copy()
+        if df_filtered.empty:
+            st.info("ยังไม่มีภารกิจที่ได้รับการอนุมัติ")
+            return
+            
         df_filtered['Date_Obj'] = pd.to_datetime(df_filtered['Date'], errors='coerce')
         
         metric_label = "รวมภารกิจทั้งหมด (ครั้ง)"
@@ -425,7 +445,7 @@ with st.sidebar:
     
     # ถ้าเป็น Admin จะเห็นครบ 3 เมนู, ถ้าไม่ใช่จะเห็นแค่ Dashboard
     if st.session_state["is_admin"]:
-        menu = ["📊 Dashboard (User View)", "📝 Data Entry (Admin View)", "✏️ Edit/Delete (Admin View)"]
+        menu = ["📊 Dashboard (User View)", "📝 Data Entry (Admin View)", "✅ Approve Missions (Admin View)", "✏️ Edit/Delete (Admin View)"]
     else:
         menu = ["📊 Dashboard (User View)"]
         
@@ -486,6 +506,34 @@ if choice == "📝 Data Entry (Admin View)" and st.session_state["is_admin"]:
     with col_right:
         st.subheader("📊 สถิติการปฏิบัติงาน")
         render_dashboard(df)
+
+elif choice == "✅ Approve Missions (Admin View)" and st.session_state["is_admin"]:
+    st.header("✅ ระบบจัดการการอนุมัติภารกิจ (รอเห็นชอบ)")
+    df = get_data()
+    pending_df = df[df['Approval Status'] == 'รอเห็นชอบ'].copy()
+    
+    if not pending_df.empty:
+        st.subheader(f"รายการที่รอเห็นชอบ ({len(pending_df)} รายการ)")
+        
+        for idx, row in pending_df.iterrows():
+            date_str = to_thai_date(row['Date'])
+            time_str = str(row['Time'])[:5]
+            time_display = f" เวลา {time_str}" if time_str else ""
+            
+            with st.container(border=True):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.markdown(f"**ภารกิจ:** {row['Mission Name']}")
+                    st.markdown(f"**วัน/เวลา:** {date_str}{time_display}")
+                    st.markdown(f"**เจ้าหน้าที่:** {row['Officers']}")
+                with col2:
+                    st.write("") # เว้นบรรทัด
+                    st.write("") 
+                    if st.button("✅ ยืนยันเห็นชอบ", key=f"app_{row['Mission ID']}", type="primary"):
+                        approve_mission(row['Mission ID'])
+                        st.rerun()
+    else:
+        st.success("🎉 ไม่มีภารกิจที่รอเห็นชอบในขณะนี้")
 
 elif choice == "✏️ Edit/Delete (Admin View)" and st.session_state["is_admin"]:
     st.header("แก้ไข / ลบ ข้อมูลภารกิจ")
