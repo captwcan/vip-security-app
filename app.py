@@ -201,7 +201,8 @@ def update_mission_details(mission_id, status, details):
     cell = sheet.find(mission_id)
     if cell:
         row_idx = cell.row
-        sheet.update(f"H{row_idx}:I{row_idx}", [[str(status), str(details)]])
+        sheet.update_cell(row_idx, 8, str(status))
+        sheet.update_cell(row_idx, 9, str(details))
 
 def delete_mission(mission_id):
     if not sheet:
@@ -387,13 +388,13 @@ def render_dashboard(df):
             },
             use_container_width=True,
             hide_index=True,
-            key="dashboard_editor"
+            key="report_editor"
         )
         
-        if st.session_state.get("dashboard_editor") and st.session_state["dashboard_editor"]["edited_rows"]:
+        if st.session_state.get("report_editor") and st.session_state["report_editor"]["edited_rows"]:
             if st.button("💾 ยืนยันการบันทึกการแก้ไขรายงาน", type="primary"):
                 changes_count = 0
-                edited_rows = st.session_state["dashboard_editor"]["edited_rows"]
+                edited_rows = st.session_state["report_editor"]["edited_rows"]
                 
                 for idx_str, changes in edited_rows.items():
                     idx = int(idx_str)
@@ -408,7 +409,7 @@ def render_dashboard(df):
                 if changes_count > 0:
                     st.success(f"อัปเดตข้อมูลรายงานสำเร็จ {changes_count} รายการ!")
                     # Clear session state so the save button disappears
-                    del st.session_state["dashboard_editor"]
+                    del st.session_state["report_editor"]
                     time.sleep(1)
                     st.rerun()
         
