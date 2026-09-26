@@ -398,8 +398,8 @@ def render_dashboard(df):
                 "ประเภทวัน": st.column_config.TextColumn("ประเภทวัน", disabled=True),
                 "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large", disabled=True),
                 "ผู้ทำรายงานผล": st.column_config.TextColumn("ผู้ทำรายงานผล", disabled=True),
-                "สถานะรายงาน": st.column_config.SelectboxColumn("สถานะรายงาน", options=["ยังไม่ส่ง", "ส่งแล้ว"]),
-                "รายละเอียดเพิ่มเติม/การเบิกจ่าย": st.column_config.TextColumn("รายละเอียดเพิ่มเติม/การเบิกจ่าย", width="large")
+                "สถานะรายงาน": st.column_config.SelectboxColumn("สถานะรายงาน", options=["ยังไม่ส่ง", "ส่งแล้ว"], disabled=False),
+                "รายละเอียดเพิ่มเติม/การเบิกจ่าย": st.column_config.TextColumn("รายละเอียดเพิ่มเติม/การเบิกจ่าย", width="large", disabled=False)
             },
             use_container_width=True,
             hide_index=True,
