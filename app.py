@@ -66,14 +66,16 @@ sheet = init_connection_v3()
 
 def get_data():
     if sheet is None:
-        return pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter"])
+        return pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details"])
     else:
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
-        if 'Time' not in df.columns and not df.empty:
-            df['Time'] = ''
-        elif df.empty:
-            df = pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter"])
+        if not df.empty:
+            if 'Time' not in df.columns: df['Time'] = ''
+            if 'Report Status' not in df.columns: df['Report Status'] = 'ยังไม่ส่ง'
+            if 'Additional Details' not in df.columns: df['Additional Details'] = ''
+        else:
+            df = pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details"])
         
         # จัดการข้อมูลเก่าใน DB ให้ตรงกับประเภทใหม่
         if not df.empty and 'Day Type' in df.columns:
@@ -154,7 +156,7 @@ def add_mission(name, date, time_val, day_type, officers, reporter):
     clean_reporter = reporter.split(" (")[0] if reporter else ""
     
     officers_str = ", ".join(clean_officers)
-    row = [mission_id, name, str(date), str(time_val), day_type, officers_str, clean_reporter]
+    row = [mission_id, name, str(date), str(time_val), day_type, officers_str, clean_reporter, "ยังไม่ส่ง", ""]
     
     sheet.append_row(row)
     st.success("บันทึกข้อมูลลง Google Sheets สำเร็จ!")
@@ -173,6 +175,16 @@ def update_mission(mission_id, name, date, time_val, day_type, officers, reporte
         row_idx = cell.row
         sheet.update(f"B{row_idx}:G{row_idx}", [[name, str(date), str(time_val), day_type, officers_str, clean_reporter]])
         st.success("อัปเดตข้อมูลใน Google Sheets สำเร็จ!")
+
+def update_mission_details(mission_id, status, details):
+    if not sheet:
+        st.error("ไม่สามารถอัปเดตได้: ยังไม่ได้เชื่อมต่อ Google Sheets")
+        return
+        
+    cell = sheet.find(mission_id)
+    if cell:
+        row_idx = cell.row
+        sheet.update(f"H{row_idx}:I{row_idx}", [[str(status), str(details)]])
 
 def delete_mission(mission_id):
     if not sheet:
@@ -324,7 +336,7 @@ def render_dashboard(df):
         st.divider()
         st.subheader("📋 ตารางแสดงประวัติภารกิจ (ตามช่วงเวลาที่เลือก)")
         
-        history_df = df_filtered[['Mission Name', 'Date', 'Time', 'Day Type', 'Officers', 'Reporter']].copy()
+        history_df = df_filtered[['Mission ID', 'Mission Name', 'Date', 'Time', 'Day Type', 'Officers', 'Reporter', 'Report Status', 'Additional Details']].copy()
         history_df['Date'] = history_df['Date'].apply(to_thai_date)
         history_df.rename(columns={
             "Mission Name": "ชื่อภารกิจ",
@@ -332,17 +344,48 @@ def render_dashboard(df):
             "Time": "เวลา",
             "Day Type": "ประเภทวัน",
             "Officers": "เจ้าหน้าที่ปฏิบัติงาน",
-            "Reporter": "ผู้ทำรายงานผล"
+            "Reporter": "ผู้ทำรายงานผล",
+            "Report Status": "สถานะรายงาน",
+            "Additional Details": "รายละเอียดเพิ่มเติม/การเบิกจ่าย"
         }, inplace=True)
-        st.dataframe(
+        
+        st.markdown("💡 **Tip:** คุณสามารถคลิกที่ช่อง **'สถานะรายงาน'** หรือ **'รายละเอียดเพิ่มเติม'** ในตารางด้านล่าง เพื่อพิมพ์ข้อมูลอัปเดตได้เลย")
+        
+        edited_df = st.data_editor(
             history_df,
             column_config={
-                "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
-                "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large")
+                "Mission ID": None, # ซ่อนไอดีไว้ไม่ต้องให้ User เห็น
+                "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large", disabled=True),
+                "วันที่": st.column_config.TextColumn("วันที่", disabled=True),
+                "เวลา": st.column_config.TextColumn("เวลา", disabled=True),
+                "ประเภทวัน": st.column_config.TextColumn("ประเภทวัน", disabled=True),
+                "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large", disabled=True),
+                "ผู้ทำรายงานผล": st.column_config.TextColumn("ผู้ทำรายงานผล", disabled=True),
+                "สถานะรายงาน": st.column_config.SelectboxColumn("สถานะรายงาน", options=["ยังไม่ส่ง", "ส่งแล้ว"]),
+                "รายละเอียดเพิ่มเติม/การเบิกจ่าย": st.column_config.TextColumn("รายละเอียดเพิ่มเติม/การเบิกจ่าย", width="large")
             },
             use_container_width=True,
             hide_index=True
         )
+        
+        # เปรียบเทียบหาจุดที่แก้ไข
+        if not edited_df.equals(history_df):
+            if st.button("💾 ยืนยันการบันทึกการแก้ไขรายงาน", type="primary"):
+                changes_count = 0
+                for idx in range(len(edited_df)):
+                    orig_status = history_df.iloc[idx]['สถานะรายงาน']
+                    orig_details = history_df.iloc[idx]['รายละเอียดเพิ่มเติม/การเบิกจ่าย']
+                    new_status = edited_df.iloc[idx]['สถานะรายงาน']
+                    new_details = edited_df.iloc[idx]['รายละเอียดเพิ่มเติม/การเบิกจ่าย']
+                    
+                    if orig_status != new_status or orig_details != new_details:
+                        m_id = edited_df.iloc[idx]['Mission ID']
+                        update_mission_details(m_id, new_status, new_details)
+                        changes_count += 1
+                
+                if changes_count > 0:
+                    st.success(f"อัปเดตข้อมูลรายงานสำเร็จ {changes_count} รายการ!")
+                    st.rerun()
         
     else:
         st.info("ยังไม่มีข้อมูลสำหรับแสดงสถิติ กรุณาบันทึกข้อมูลก่อน")
