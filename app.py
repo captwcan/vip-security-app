@@ -208,6 +208,8 @@ def update_mission_details(mission_id, status, details):
         sheet.update_cell(row_idx, 8, str(status))
         sheet.update_cell(row_idx, 9, str(details))
         st.cache_data.clear()
+    else:
+        st.error(f"ไม่พบ Mission ID: {mission_id} ในฐานข้อมูล")
 
 def delete_mission(mission_id):
     if not sheet:
@@ -417,6 +419,7 @@ def render_dashboard(df):
                     st.success(f"อัปเดตข้อมูลรายงานสำเร็จ {changes_count} รายการ!")
                     # Clear session state so the save button disappears
                     del st.session_state["report_editor"]
+                    st.cache_data.clear()
                     time.sleep(1)
                     st.rerun()
         
