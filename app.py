@@ -443,15 +443,15 @@ with st.sidebar:
             
     st.divider()
     
-    # ถ้าเป็น Admin จะเห็นครบ 3 เมนู, ถ้าไม่ใช่จะเห็นแค่ Dashboard
+    # ถ้าเป็น Admin จะเห็นครบทุกเมนู, ถ้าไม่ใช่จะเห็นแค่ Dashboard
     if st.session_state["is_admin"]:
-        menu = ["📊 Dashboard (User View)", "📝 Data Entry (Admin View)", "✅ Approve Missions (Admin View)", "✏️ Edit/Delete (Admin View)"]
+        menu = ["📊 ข้อมูลภารกิจ VIP Protection", "📝 ลงข้อมูลภารกิจ", "✅ ภารกิจรอเห็นชอบ", "✏️ การแก้ไข/ลบ"]
     else:
-        menu = ["📊 Dashboard (User View)"]
+        menu = ["📊 ข้อมูลภารกิจ VIP Protection"]
         
     choice = st.radio("เมนูนำทาง", menu)
 
-if choice == "📝 Data Entry (Admin View)" and st.session_state["is_admin"]:
+if choice == "📝 ลงข้อมูลภารกิจ" and st.session_state["is_admin"]:
     st.header("📝 ระบบจัดการภารกิจรักษาความปลอดภัย (Admin)")
     df = get_data()
     
@@ -507,7 +507,7 @@ if choice == "📝 Data Entry (Admin View)" and st.session_state["is_admin"]:
         st.subheader("📊 สถิติการปฏิบัติงาน")
         render_dashboard(df)
 
-elif choice == "✅ Approve Missions (Admin View)" and st.session_state["is_admin"]:
+elif choice == "✅ ภารกิจรอเห็นชอบ" and st.session_state["is_admin"]:
     st.header("✅ ระบบจัดการการอนุมัติภารกิจ (รอเห็นชอบ)")
     df = get_data()
     pending_df = df[df['Approval Status'] == 'รอเห็นชอบ'].copy()
@@ -535,7 +535,7 @@ elif choice == "✅ Approve Missions (Admin View)" and st.session_state["is_admi
     else:
         st.success("🎉 ไม่มีภารกิจที่รอเห็นชอบในขณะนี้")
 
-elif choice == "✏️ Edit/Delete (Admin View)" and st.session_state["is_admin"]:
+elif choice == "✏️ การแก้ไข/ลบ" and st.session_state["is_admin"]:
     st.header("แก้ไข / ลบ ข้อมูลภารกิจ")
     df = get_data()
     if not df.empty:
@@ -603,7 +603,7 @@ elif choice == "✏️ Edit/Delete (Admin View)" and st.session_state["is_admin"
     else:
         st.info("ยังไม่มีข้อมูลภารกิจในระบบ")
 
-elif choice == "📊 Dashboard (User View)":
+elif choice == "📊 ข้อมูลภารกิจ VIP Protection":
     st.header("📊 สถิติภารกิจรักษาความปลอดภัย (Dashboard)")
     df = get_data()
     render_dashboard(df)
