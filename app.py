@@ -210,12 +210,22 @@ def render_dashboard(df):
                 
         total_missions_count = len(df_filtered)
         
-        # ค้นหาภารกิจล่าสุดจาก Dataframe ดั้งเดิม (อ้างอิงตามลำดับที่บันทึกลง Sheet แถวสุดท้าย)
-        latest_row = df.iloc[-1]
-        latest_name = latest_row['Mission Name']
-        latest_date = to_thai_date(latest_row['Date'])
-        latest_time = str(latest_row['Time'])[:5] if pd.notna(latest_row['Time']) and str(latest_row['Time']).strip() else ""
-        latest_display = f"{latest_date}" + (f" เวลา {latest_time}" if latest_time else "")
+        # ค้นหาภารกิจล่าสุด (อ้างอิงจากวันที่ปฏิบัติงานจริง ที่ <= วันนี้)
+        today = datetime.today().date()
+        df_for_latest = df.copy()
+        df_for_latest['Date_Obj'] = pd.to_datetime(df_for_latest['Date'], errors='coerce').dt.date
+        past_missions = df_for_latest[df_for_latest['Date_Obj'] <= today]
+        
+        if not past_missions.empty:
+            past_missions = past_missions.sort_values(by=['Date', 'Time'], ascending=[False, False])
+            latest_row = past_missions.iloc[0]
+            latest_name = latest_row['Mission Name']
+            latest_date = to_thai_date(latest_row['Date'])
+            latest_time = str(latest_row['Time'])[:5] if pd.notna(latest_row['Time']) and str(latest_row['Time']).strip() else ""
+            latest_display = f"{latest_date}" + (f" เวลา {latest_time}" if latest_time else "")
+        else:
+            latest_name = "-"
+            latest_display = "ยังไม่มีภารกิจ"
         
         # จัดเรียง 2 Metrics ไว้คู่กัน
         m_col1, m_col2 = st.columns(2)
