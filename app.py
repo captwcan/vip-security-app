@@ -5,6 +5,7 @@ from google.oauth2.service_account import Credentials
 import uuid
 import os
 from datetime import datetime
+import time
 
 # ==========================================
 # 1. Configuration & Constants
@@ -365,26 +366,30 @@ def render_dashboard(df):
                 "รายละเอียดเพิ่มเติม/การเบิกจ่าย": st.column_config.TextColumn("รายละเอียดเพิ่มเติม/การเบิกจ่าย", width="large")
             },
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            key="dashboard_editor"
         )
         
-        # เปรียบเทียบหาจุดที่แก้ไข
-        if not edited_df.equals(history_df):
+        if st.session_state.get("dashboard_editor") and st.session_state["dashboard_editor"]["edited_rows"]:
             if st.button("💾 ยืนยันการบันทึกการแก้ไขรายงาน", type="primary"):
                 changes_count = 0
-                for idx in range(len(edited_df)):
-                    orig_status = history_df.iloc[idx]['สถานะรายงาน']
-                    orig_details = history_df.iloc[idx]['รายละเอียดเพิ่มเติม/การเบิกจ่าย']
-                    new_status = edited_df.iloc[idx]['สถานะรายงาน']
-                    new_details = edited_df.iloc[idx]['รายละเอียดเพิ่มเติม/การเบิกจ่าย']
+                edited_rows = st.session_state["dashboard_editor"]["edited_rows"]
+                
+                for idx_str, changes in edited_rows.items():
+                    idx = int(idx_str)
+                    m_id = history_df.iloc[idx]['Mission ID']
+                    # ค่าเริ่มต้นเป็นค่าเดิมใน history_df
+                    new_status = changes.get("สถานะรายงาน", history_df.iloc[idx]['สถานะรายงาน'])
+                    new_details = changes.get("รายละเอียดเพิ่มเติม/การเบิกจ่าย", history_df.iloc[idx]['รายละเอียดเพิ่มเติม/การเบิกจ่าย'])
                     
-                    if orig_status != new_status or orig_details != new_details:
-                        m_id = edited_df.iloc[idx]['Mission ID']
-                        update_mission_details(m_id, new_status, new_details)
-                        changes_count += 1
+                    update_mission_details(m_id, new_status, new_details)
+                    changes_count += 1
                 
                 if changes_count > 0:
                     st.success(f"อัปเดตข้อมูลรายงานสำเร็จ {changes_count} รายการ!")
+                    # Clear session state so the save button disappears
+                    del st.session_state["dashboard_editor"]
+                    time.sleep(1)
                     st.rerun()
         
     else:
