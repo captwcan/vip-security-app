@@ -80,9 +80,10 @@ def get_data():
             
             # เติมค่าให้แถวเก่าที่ช่องใหม่ยังว่างอยู่
             df['Report Status'] = df['Report Status'].replace('', 'ยังไม่ส่ง')
-            df['Report Status'] = df['Report Status'].fillna('ยังไม่ส่ง')
+            df['Report Status'] = df['Report Status'].fillna('ยังไม่ส่ง').astype(str)
             df['Approval Status'] = df['Approval Status'].replace('', 'อนุมัติแล้ว')
-            df['Approval Status'] = df['Approval Status'].fillna('อนุมัติแล้ว')
+            df['Approval Status'] = df['Approval Status'].fillna('อนุมัติแล้ว').astype(str)
+            df['Additional Details'] = df['Additional Details'].fillna('').astype(str)
         else:
             df = pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details", "Approval Status"])
         
