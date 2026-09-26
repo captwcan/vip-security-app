@@ -77,6 +77,12 @@ def get_data():
             if 'Report Status' not in df.columns: df['Report Status'] = 'ยังไม่ส่ง'
             if 'Additional Details' not in df.columns: df['Additional Details'] = ''
             if 'Approval Status' not in df.columns: df['Approval Status'] = 'อนุมัติแล้ว'
+            
+            # เติมค่าให้แถวเก่าที่ช่องใหม่ยังว่างอยู่
+            df['Report Status'] = df['Report Status'].replace('', 'ยังไม่ส่ง')
+            df['Report Status'] = df['Report Status'].fillna('ยังไม่ส่ง')
+            df['Approval Status'] = df['Approval Status'].replace('', 'อนุมัติแล้ว')
+            df['Approval Status'] = df['Approval Status'].fillna('อนุมัติแล้ว')
         else:
             df = pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details", "Approval Status"])
         
