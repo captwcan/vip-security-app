@@ -10,7 +10,57 @@ import time
 # ==========================================
 # 1. Configuration & Constants
 # ==========================================
-st.set_page_config(page_title="VIP Security Tracking", layout="wide")
+st.set_page_config(
+    page_title="ระบบบริหารจัดการภารกิจ VIP Protection | ป.ป.ช.",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for modern VIP theme & dashboard styling
+st.markdown("""
+<style>
+    /* ธีมสีพื้นหลังและตัวอักษรของระบบ VIP */
+    .stApp {
+        background-color: #F8FAFC;
+        color: #0F172A;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* ปุ่ม Primary Button - สี Deep Royal Navy ภูมิฐาน */
+    button[kind="primary"] {
+        background-color: #1E3A8A !important;
+        border-color: #1E3A8A !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2);
+    }
+    button[kind="primary"]:hover {
+        background-color: #1E40AF !important;
+        border-color: #1E40AF !important;
+    }
+
+    /* ปรับแต่งการ์ด st.metric */
+    [data-testid="stMetric"] {
+        background-color: #ffffff;
+        padding: 14px 18px;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    [data-testid="stMetricLabel"] {
+        font-weight: 600;
+        color: #475569;
+    }
+    
+    /* ปรับแต่ง container border */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #ffffff;
+        border-radius: 12px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 OFFICERS = [
     "นายวันพิทักษ์ วงค์มูล", "นายทรงพล เล็กพูนศักดิ์",
@@ -234,94 +284,146 @@ def delete_mission(mission_id):
 # ==========================================
 def render_dashboard(df):
     if not df.empty:
-        filter_type = st.radio("มุมมองข้อมูล", ["สถิติสะสม (All-time)", "สถิติรายเดือน (Monthly)"], horizontal=True)
-        
+        # 1. ส่วนตัวกรองข้อมูล (Filter Bar)
         df_filtered = df[df['Approval Status'] == 'อนุมัติแล้ว'].copy()
         if df_filtered.empty:
             st.info("ยังไม่มีภารกิจที่ได้รับการอนุมัติ")
             return
             
         df_filtered['Date_Obj'] = pd.to_datetime(df_filtered['Date'], errors='coerce')
+        df_filtered['Month-Year'] = df_filtered['Date_Obj'].dt.strftime('%Y-%m')
         
-        metric_label = "รวมภารกิจทั้งหมด (ครั้ง)"
-        
-        if filter_type == "สถิติรายเดือน (Monthly)":
-            df_filtered['Month-Year'] = df_filtered['Date_Obj'].dt.strftime('%Y-%m')
-            months_raw = sorted(df_filtered['Month-Year'].dropna().unique(), reverse=True)
-            
-            if months_raw:
-                month_options = {raw: to_thai_month_year(raw) for raw in months_raw}
-                selected_thai_month = st.selectbox("เลือกเดือน/ปี", list(month_options.values()))
-                
-                selected_raw_month = [k for k, v in month_options.items() if v == selected_thai_month][0]
-                df_filtered = df_filtered[df_filtered['Month-Year'] == selected_raw_month]
-                metric_label = f"จำนวนภารกิจในเดือน{selected_thai_month} (ครั้ง)"
-                
+        with st.container():
+            col_filter1, col_filter2 = st.columns([1.2, 1])
+            with col_filter1:
+                filter_type = st.radio("🔍 มุมมองข้อมูล", ["สถิติสะสม (All-time)", "สถิติรายเดือน (Monthly)"], horizontal=True)
+            with col_filter2:
+                selected_thai_month = None
+                if filter_type == "สถิติรายเดือน (Monthly)":
+                    months_raw = sorted(df_filtered['Month-Year'].dropna().unique(), reverse=True)
+                    if months_raw:
+                        month_options = {raw: to_thai_month_year(raw) for raw in months_raw}
+                        selected_thai_month = st.selectbox("📅 เลือกเดือน/ปี", list(month_options.values()))
+                        selected_raw_month = [k for k, v in month_options.items() if v == selected_thai_month][0]
+                        df_filtered = df_filtered[df_filtered['Month-Year'] == selected_raw_month]
+
+        # 2. คำนวณค่าสถิติสำหรับ Key Metrics Cards ด้านบนสุด
+        metric_label = f"ภารกิจเดือน{selected_thai_month}" if filter_type == "สถิติรายเดือน (Monthly)" and selected_thai_month else "ภารกิจสะสมทั้งหมด"
         total_missions_count = len(df_filtered)
         
-        # ค้นหาภารกิจล่าสุด (อ้างอิงจากวันที่ปฏิบัติงานจริง ที่ <= วันนี้)
+        # นับภารกิจรอเห็นชอบ (Admin) ทั้งหมดในระบบ
+        pending_approval_count = len(df[df['Approval Status'] == 'รอเห็นชอบ'])
+        
+        # นับค้างส่งรายงาน (จากภารกิจที่อนุมัติแล้วในช่วงที่เลือก)
+        pending_reports_count = len(df_filtered[df_filtered['Report Status'] == 'ยังไม่ส่ง'])
+        
+        # ภารกิจล่าสุด (อ้างอิงจากวันที่ปฏิบัติงานจริง ที่ <= วันนี้)
         today = datetime.today().date()
-        df_for_latest = df.copy()
+        df_for_latest = df[df['Approval Status'] == 'อนุมัติแล้ว'].copy()
         df_for_latest['Date_Obj'] = pd.to_datetime(df_for_latest['Date'], errors='coerce').dt.date
         past_missions = df_for_latest[df_for_latest['Date_Obj'] <= today]
         
         if not past_missions.empty:
             past_missions = past_missions.sort_values(by=['Date', 'Time'], ascending=[False, False])
             latest_row = past_missions.iloc[0]
-            latest_name = latest_row['Mission Name']
+            latest_name = str(latest_row['Mission Name'])
             latest_date = to_thai_date(latest_row['Date'])
             latest_time = str(latest_row['Time'])[:5] if pd.notna(latest_row['Time']) and str(latest_row['Time']).strip() else ""
             latest_display = f"{latest_date}" + (f" เวลา {latest_time}" if latest_time else "")
         else:
             latest_name = "-"
             latest_display = "ยังไม่มีภารกิจ"
-        
-        # จัดเรียง 2 Metrics ไว้คู่กัน
-        m_col1, m_col2 = st.columns(2)
+
+        # แสดงผล 4 Key Metrics Cards
+        m_col1, m_col2, m_col3, m_col4 = st.columns(4)
         with m_col1:
-            st.metric(label=metric_label, value=total_missions_count)
+            with st.container(border=True):
+                st.metric(
+                    label=f"🎯 {metric_label}",
+                    value=f"{total_missions_count} ครั้ง",
+                    delta="อนุมัติแล้ว",
+                    delta_color="off"
+                )
         with m_col2:
-            st.metric(label="📌 ภารกิจล่าสุด", value=latest_name, delta=latest_display, delta_color="off")
+            with st.container(border=True):
+                st.metric(
+                    label="⏳ รอเห็นชอบ (Admin)",
+                    value=f"{pending_approval_count} รายการ",
+                    delta="รอดำเนินการ" if pending_approval_count > 0 else "เรียบร้อยทั้งหมด",
+                    delta_color="inverse" if pending_approval_count > 0 else "normal"
+                )
+        with m_col3:
+            with st.container(border=True):
+                st.metric(
+                    label="⚠️ ค้างส่งรายงาน",
+                    value=f"{pending_reports_count} รายการ",
+                    delta="รอส่งผลปฏิบัติงาน" if pending_reports_count > 0 else "ส่งครบถ้วนแล้ว",
+                    delta_color="inverse" if pending_reports_count > 0 else "normal"
+                )
+        with m_col4:
+            with st.container(border=True):
+                display_latest = latest_name if len(latest_name) <= 18 else latest_name[:16] + "..."
+                st.metric(
+                    label="📌 ภารกิจล่าสุด",
+                    value=display_latest,
+                    delta=latest_display,
+                    delta_color="off",
+                    help=latest_name if len(latest_name) > 18 else None
+                )
+
+        st.write("") # เว้นระยะสายตา
+        
+        # 3. จัดสัดส่วนหน้าจอแบบ 2 คอลัมน์: งานที่กำลังจะมาถึง & สัดส่วนประเภทวัน
+        col_upcoming, col_daytypes = st.columns([1.1, 0.9])
+        
+        with col_upcoming:
+            st.subheader("🚀 งานที่กำลังจะมาถึง (Upcoming Missions)")
+            upcoming_df = df_filtered.copy()
+            upcoming_df['Date_Obj_DateOnly'] = pd.to_datetime(upcoming_df['Date'], errors='coerce').dt.date
+            upcoming_df = upcoming_df[upcoming_df['Date_Obj_DateOnly'] >= today]
+            upcoming_df = upcoming_df.sort_values(by=['Date', 'Time'], ascending=[True, True])
             
-        st.divider()
-        
-        # ==========================================
-        # งานที่กำลังจะมาถึง (Upcoming Missions)
-        # ==========================================
-        st.subheader("🚀 งานที่กำลังจะมาถึง (Upcoming Missions)")
-        
-        today = datetime.today().date()
-        upcoming_df = df_filtered.copy()
-        upcoming_df['Date_Obj_DateOnly'] = pd.to_datetime(upcoming_df['Date'], errors='coerce').dt.date
-        upcoming_df = upcoming_df[upcoming_df['Date_Obj_DateOnly'] >= today]
-        
-        # เรียงลำดับจากวันที่ใกล้จะถึงที่สุดขึ้นก่อน (Ascending)
-        upcoming_df = upcoming_df.sort_values(by=['Date', 'Time'], ascending=[True, True])
-        
-        if not upcoming_df.empty:
-            upcoming_display = upcoming_df[['Date', 'Time', 'Mission Name', 'Officers']].copy()
-            upcoming_display['Date'] = upcoming_display['Date'].apply(to_thai_date)
-            upcoming_display.rename(columns={
-                "Date": "วันที่",
-                "Time": "เวลา",
-                "Mission Name": "ชื่อภารกิจ",
-                "Officers": "เจ้าหน้าที่ปฏิบัติงาน"
-            }, inplace=True)
-            
-            st.dataframe(
-                upcoming_display,
-                column_config={
-                    "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
-                    "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large")
-                },
-                use_container_width=True,
-                hide_index=True
+            if not upcoming_df.empty:
+                upcoming_display = upcoming_df[['Date', 'Time', 'Mission Name', 'Officers']].copy()
+                upcoming_display['Date'] = upcoming_display['Date'].apply(to_thai_date)
+                upcoming_display.rename(columns={
+                    "Date": "วันที่",
+                    "Time": "เวลา",
+                    "Mission Name": "ชื่อภารกิจ",
+                    "Officers": "เจ้าหน้าที่ปฏิบัติงาน"
+                }, inplace=True)
+                
+                st.dataframe(
+                    upcoming_display,
+                    column_config={
+                        "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
+                        "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large")
+                    },
+                    use_container_width=True,
+                    hide_index=True,
+                    height=280
+                )
+            else:
+                st.info("🎉 ไม่มีภารกิจที่กำลังจะมาถึงในช่วงเวลานี้")
+                
+        with col_daytypes:
+            st.subheader("📊 สัดส่วนภารกิจตามประเภทวัน")
+            day_counts = df_filtered['Day Type'].value_counts()
+            day_chart_data = pd.DataFrame({
+                "ประเภทวัน": DAY_TYPES,
+                "จำนวนภารกิจ": [int(day_counts.get(dt, 0)) for dt in DAY_TYPES]
+            })
+            st.bar_chart(
+                day_chart_data,
+                x="ประเภทวัน",
+                y="จำนวนภารกิจ",
+                color="ประเภทวัน",
+                height=280
             )
-        else:
-            st.info("🎉 ไม่มีภารกิจที่กำลังจะมาถึงในช่วงเวลานี้")
-            
+
+        # 4. สถิติการปฏิบัติงานรายบุคคล (Leaderboard) พร้อมกราฟแท่งแบบ Stacked และ Expander
         st.divider()
-        st.subheader("🏆 สถิติการปฏิบัติงาน (Leaderboard)")
+        st.subheader("🏆 สถิติการปฏิบัติงานรายบุคคล (Leaderboard)")
         
         stats = []
         for officer in OFFICERS:
@@ -344,34 +446,49 @@ def render_dashboard(df):
             
         stats_df = pd.DataFrame(stats)
         
-        def highlight_min_red(s):
-            is_min = s == s.min()
-            return ['background-color: #ffcccc; color: black' if v else '' for v in is_min]
+        # กราฟแท่งเปรียบเทียบสถิติเจ้าหน้าที่ (เรียงตามจำนวนภารกิจรวม)
+        officers_chart_df = stats_df.sort_values(by="รวม", ascending=False).copy()
+        st.caption("📈 กราฟแสดงสัดส่วนการออกปฏิบัติงานของเจ้าหน้าที่แต่ละท่าน (แยกตามประเภทวัน)")
+        st.bar_chart(
+            officers_chart_df,
+            x="ชื่อเจ้าหน้าที่",
+            y=["ปกติ (ในเวลา)", "ปกติ (นอกเวลา)", "วันหยุด"],
+            color=["#2563EB", "#F59E0B", "#EF4444"],
+            stack=True,
+            height=360
+        )
+        
+        # ใช้ st.expander เพื่อเก็บตารางที่มีความยาว ให้หน้าจอไม่รก
+        with st.expander("🔍 ดูตารางคะแนนสถิติรายบุคคลแบบละเอียด (พร้อมสีไฮไลท์ตามเกณฑ์)", expanded=False):
+            def highlight_min_red(s):
+                is_min = s == s.min()
+                return ['background-color: #ffcccc; color: black' if v else '' for v in is_min]
 
-        def highlight_min_blue(s):
-            is_min = s == s.min()
-            return ['background-color: #cce5ff; color: black' if v else '' for v in is_min]
+            def highlight_min_blue(s):
+                is_min = s == s.min()
+                return ['background-color: #cce5ff; color: black' if v else '' for v in is_min]
+                
+            def highlight_min_yellow(s):
+                is_min = s == s.min()
+                return ['background-color: #ffffe0; color: black' if v else '' for v in is_min]
+
+            styled_df = (stats_df.style
+                         .apply(highlight_min_red, subset=['วันหยุด'])
+                         .apply(highlight_min_blue, subset=['ทำรายงาน'])
+                         .apply(highlight_min_yellow, subset=['ปกติ (นอกเวลา)']))
             
-        def highlight_min_yellow(s):
-            is_min = s == s.min()
-            return ['background-color: #ffffe0; color: black' if v else '' for v in is_min]
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            
+            st.markdown("""
+            **คำอธิบายสีไฮไลท์ (ชี้เป้าคนที่ทำงานน้อยที่สุด เพื่อความสมดุลในการกระจายงาน):**
+            - <span style="background-color:#ffffe0; color:black; padding:2px 6px; border-radius:3px;"> สีเหลืองอ่อน </span>: ผู้ที่มีสถิติออกเวร **ปกติ (นอกเวลา)** น้อยที่สุด
+            - <span style="background-color:#ffcccc; color:black; padding:2px 6px; border-radius:3px;"> สีแดงอ่อน </span>: ผู้ที่มีสถิติออกเวร **วันหยุด** น้อยที่สุด
+            - <span style="background-color:#cce5ff; color:black; padding:2px 6px; border-radius:3px;"> สีฟ้าอ่อน </span>: ผู้ที่มีสถิติ **การทำรายงาน** น้อยที่สุด
+            """, unsafe_allow_html=True)
 
-        styled_df = (stats_df.style
-                     .apply(highlight_min_red, subset=['วันหยุด'])
-                     .apply(highlight_min_blue, subset=['ทำรายงาน'])
-                     .apply(highlight_min_yellow, subset=['ปกติ (นอกเวลา)']))
-        
-        st.dataframe(styled_df, use_container_width=True, hide_index=True, height=500)
-        
-        st.markdown("""
-        **คำอธิบายสีไฮไลท์ (ชี้เป้าคนที่ทำงานน้อยที่สุด):**
-        - <span style="background-color:#ffffe0; color:black; padding:2px 5px;"> สีเหลืองอ่อน </span>: ผู้ที่มีสถิติออกเวร **ปกติ (นอกเวลา)** น้อยที่สุด
-        - <span style="background-color:#ffcccc; color:black; padding:2px 5px;"> สีแดงอ่อน </span>: ผู้ที่มีสถิติออกเวร **วันหยุด** น้อยที่สุด
-        - <span style="background-color:#cce5ff; color:black; padding:2px 5px;"> สีฟ้าอ่อน </span>: ผู้ที่มีสถิติ **การทำรายงาน** น้อยที่สุด
-        """, unsafe_allow_html=True)
-        
+        # 5. ประวัติภารกิจ & ระบบติดตามรายงาน/เบิกจ่าย (มีทั้ง Interactive Editor และ Overview ไฮไลท์สี)
         st.divider()
-        st.subheader("📋 ตารางแสดงประวัติภารกิจ (ตามช่วงเวลาที่เลือก)")
+        st.subheader("📋 ประวัติภารกิจและการติดตามรายงาน")
         
         history_df = df_filtered[['Mission ID', 'Mission Name', 'Date', 'Time', 'Day Type', 'Officers', 'Reporter', 'Report Status', 'Additional Details']].copy()
         history_df.reset_index(drop=True, inplace=True)
@@ -387,48 +504,94 @@ def render_dashboard(df):
             "Additional Details": "รายละเอียดเพิ่มเติม/การเบิกจ่าย"
         }, inplace=True)
         
-        st.markdown("💡 **Tip:** คุณสามารถคลิกที่ช่อง **'สถานะรายงาน'** หรือ **'รายละเอียดเพิ่มเติม'** ในตารางด้านล่าง เพื่อพิมพ์ข้อมูลอัปเดตได้เลย")
+        tab_edit, tab_overview = st.tabs([
+            "✏️ จัดการสถานะรายงาน & การเบิกจ่าย (Interactive Editor)", 
+            "📑 ตารางภาพรวมพร้อมไฮไลท์สีสถานะ (Styler Overview)"
+        ])
         
-        edited_df = st.data_editor(
-            history_df,
-            column_config={
-                "Mission ID": None, # ซ่อนไอดีไว้ไม่ต้องให้ User เห็น
-                "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large", disabled=True),
-                "วันที่": st.column_config.TextColumn("วันที่", disabled=True),
-                "เวลา": st.column_config.TextColumn("เวลา", disabled=True),
-                "ประเภทวัน": st.column_config.TextColumn("ประเภทวัน", disabled=True),
-                "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large", disabled=True),
-                "ผู้ทำรายงานผล": st.column_config.TextColumn("ผู้ทำรายงานผล", disabled=True),
-                "สถานะรายงาน": st.column_config.SelectboxColumn("สถานะรายงาน", options=["ยังไม่ส่ง", "ส่งแล้ว"], disabled=False),
-                "รายละเอียดเพิ่มเติม/การเบิกจ่าย": st.column_config.TextColumn("รายละเอียดเพิ่มเติม/การเบิกจ่าย", width="large", disabled=False)
-            },
-            use_container_width=True,
-            hide_index=True,
-            key="report_editor"
-        )
-        
-        if st.session_state.get("report_editor") and st.session_state["report_editor"]["edited_rows"]:
-            if st.button("💾 ยืนยันการบันทึกการแก้ไขรายงาน", type="primary"):
-                changes_count = 0
-                edited_rows = st.session_state["report_editor"]["edited_rows"]
-                
-                for idx_str, changes in edited_rows.items():
-                    idx = int(idx_str)
-                    m_id = history_df.iloc[idx]['Mission ID']
-                    # ค่าเริ่มต้นเป็นค่าเดิมใน history_df
-                    new_status = changes.get("สถานะรายงาน", history_df.iloc[idx]['สถานะรายงาน'])
-                    new_details = changes.get("รายละเอียดเพิ่มเติม/การเบิกจ่าย", history_df.iloc[idx]['รายละเอียดเพิ่มเติม/การเบิกจ่าย'])
+        with tab_edit:
+            st.markdown("💡 **Tip:** ดับเบิ้ลคลิกที่ช่อง **'สถานะรายงาน'** หรือ **'รายละเอียดเพิ่มเติม/การเบิกจ่าย'** เพื่อแก้ไขข้อมูล แล้วกดปุ่มบันทึกด้านล่าง")
+            
+            edited_df = st.data_editor(
+                history_df,
+                column_config={
+                    "Mission ID": None, # ซ่อนไอดีไว้ไม่ต้องให้ User เห็น
+                    "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large", disabled=True),
+                    "วันที่": st.column_config.TextColumn("วันที่", disabled=True),
+                    "เวลา": st.column_config.TextColumn("เวลา", disabled=True),
+                    "ประเภทวัน": st.column_config.TextColumn("ประเภทวัน", disabled=True),
+                    "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large", disabled=True),
+                    "ผู้ทำรายงานผล": st.column_config.TextColumn("ผู้ทำรายงานผล", disabled=True),
+                    "สถานะรายงาน": st.column_config.SelectboxColumn("สถานะรายงาน", options=["ยังไม่ส่ง", "ส่งแล้ว"], disabled=False),
+                    "รายละเอียดเพิ่มเติม/การเบิกจ่าย": st.column_config.TextColumn("รายละเอียดเพิ่มเติม/การเบิกจ่าย", width="large", disabled=False)
+                },
+                use_container_width=True,
+                hide_index=True,
+                key="report_editor"
+            )
+            
+            if st.session_state.get("report_editor") and st.session_state["report_editor"]["edited_rows"]:
+                if st.button("💾 ยืนยันการบันทึกการแก้ไขรายงาน", type="primary"):
+                    changes_count = 0
+                    edited_rows = st.session_state["report_editor"]["edited_rows"]
                     
-                    update_mission_details(m_id, new_status, new_details)
-                    changes_count += 1
+                    for idx_str, changes in edited_rows.items():
+                        idx = int(idx_str)
+                        m_id = history_df.iloc[idx]['Mission ID']
+                        new_status = changes.get("สถานะรายงาน", history_df.iloc[idx]['สถานะรายงาน'])
+                        new_details = changes.get("รายละเอียดเพิ่มเติม/การเบิกจ่าย", history_df.iloc[idx]['รายละเอียดเพิ่มเติม/การเบิกจ่าย'])
+                        
+                        update_mission_details(m_id, new_status, new_details)
+                        changes_count += 1
+                    
+                    if changes_count > 0:
+                        st.success(f"อัปเดตข้อมูลรายงานสำเร็จ {changes_count} รายการ!")
+                        del st.session_state["report_editor"]
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                        
+        with tab_overview:
+            overview_df = df_filtered[['Date', 'Time', 'Mission Name', 'Officers', 'Reporter', 'Report Status', 'Additional Details', 'Approval Status']].copy()
+            overview_df.reset_index(drop=True, inplace=True)
+            overview_df['Date'] = overview_df['Date'].apply(to_thai_date)
+            overview_df.rename(columns={
+                "Mission Name": "ชื่อภารกิจ",
+                "Date": "วันที่",
+                "Time": "เวลา",
+                "Officers": "เจ้าหน้าที่ปฏิบัติงาน",
+                "Reporter": "ผู้ทำรายงาน",
+                "Report Status": "สถานะรายงาน",
+                "Additional Details": "รายละเอียด/เบิกจ่าย",
+                "Approval Status": "สถานะการอนุมัติ"
+            }, inplace=True)
+            
+            def highlight_status(val):
+                if val == "ยังไม่ส่ง":
+                    return "background-color: #fee2e2; color: #991b1b; font-weight: 600;" # red highlight
+                elif val == "ส่งแล้ว":
+                    return "background-color: #dcfce7; color: #166534; font-weight: 600;" # green highlight
+                elif val == "อนุมัติแล้ว":
+                    return "background-color: #dcfce7; color: #166534; font-weight: 600;" # green highlight
+                elif val == "รอเห็นชอบ":
+                    return "background-color: #fef3c7; color: #92400e; font-weight: 600;" # amber highlight
+                return ""
                 
-                if changes_count > 0:
-                    st.success(f"อัปเดตข้อมูลรายงานสำเร็จ {changes_count} รายการ!")
-                    # Clear session state so the save button disappears
-                    del st.session_state["report_editor"]
-                    st.cache_data.clear()
-                    time.sleep(1)
-                    st.rerun()
+            styled_overview = overview_df.style
+            if hasattr(styled_overview, 'map'):
+                styled_overview = styled_overview.map(highlight_status, subset=['สถานะรายงาน', 'สถานะการอนุมัติ'])
+            elif hasattr(styled_overview, 'applymap'):
+                styled_overview = styled_overview.applymap(highlight_status, subset=['สถานะรายงาน', 'สถานะการอนุมัติ'])
+                
+            st.dataframe(styled_overview, use_container_width=True, hide_index=True)
+            
+            st.markdown("""
+            **คำอธิบายสีสถานะ (Pandas Styler):**
+            - <span style="background-color:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:4px; font-weight:600;">ยังไม่ส่ง</span> : ไฮไลท์สีแดงเตือนความจำว่ายังค้างส่งรายงานผล
+            - <span style="background-color:#dcfce7; color:#166534; padding:2px 8px; border-radius:4px; font-weight:600;">ส่งแล้ว</span> : ไฮไลท์สีเขียวแสดงว่าส่งรายงานผลเรียบร้อย
+            - <span style="background-color:#dcfce7; color:#166534; padding:2px 8px; border-radius:4px; font-weight:600;">อนุมัติแล้ว</span> : ไฮไลท์สีเขียวแสดงว่าภารกิจผ่านการอนุมัติแล้ว
+            - <span style="background-color:#fef3c7; color:#92400e; padding:2px 8px; border-radius:4px; font-weight:600;">รอเห็นชอบ</span> : ไฮไลท์สีส้มแสดงว่าภารกิจอยู่ระหว่างรอเห็นชอบ
+            """, unsafe_allow_html=True)
         
     else:
         st.info("ยังไม่มีข้อมูลสำหรับแสดงสถิติ กรุณาบันทึกข้อมูลก่อน")
@@ -446,7 +609,10 @@ with st.sidebar:
     if not st.session_state["is_admin"]:
         password_input = st.text_input("รหัสผ่านจัดการข้อมูล", type="password")
         # ใช้รหัสผ่านจาก Streamlit Secrets (ถ้าไม่มีให้ใช้ nacc1234 เป็นค่าเริ่มต้น)
-        correct_password = st.secrets.get("admin_password", "nacc1234")
+        try:
+            correct_password = st.secrets.get("admin_password", "nacc1234")
+        except Exception:
+            correct_password = "nacc1234"
         if st.button("เข้าสู่ระบบ"):
             if password_input == correct_password:
                 st.session_state["is_admin"] = True
