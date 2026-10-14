@@ -373,57 +373,46 @@ def render_dashboard(df):
 
         st.write("") # เว้นระยะสายตา
         
-        # 3. จัดสัดส่วนหน้าจอแบบ 2 คอลัมน์: งานที่กำลังจะมาถึง & สัดส่วนประเภทวัน
-        col_upcoming, col_daytypes = st.columns([1.1, 0.9])
-        
-        with col_upcoming:
-            st.subheader("🚀 งานที่กำลังจะมาถึง (Upcoming Missions)")
-            upcoming_df = df_filtered.copy()
-            upcoming_df['Date_Obj_DateOnly'] = pd.to_datetime(upcoming_df['Date'], errors='coerce').dt.date
-            upcoming_df = upcoming_df[upcoming_df['Date_Obj_DateOnly'] >= today]
-            upcoming_df = upcoming_df.sort_values(by=['Date', 'Time'], ascending=[True, True])
-            
-            if not upcoming_df.empty:
-                upcoming_display = upcoming_df[['Date', 'Time', 'Mission Name', 'Officers']].copy()
-                upcoming_display['Date'] = upcoming_display['Date'].apply(to_thai_date)
-                upcoming_display.rename(columns={
-                    "Date": "วันที่",
-                    "Time": "เวลา",
-                    "Mission Name": "ชื่อภารกิจ",
-                    "Officers": "เจ้าหน้าที่ปฏิบัติงาน"
-                }, inplace=True)
-                
-                st.dataframe(
-                    upcoming_display,
-                    column_config={
-                        "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
-                        "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large")
-                    },
-                    use_container_width=True,
-                    hide_index=True,
-                    height=280
-                )
-            else:
-                st.info("🎉 ไม่มีภารกิจที่กำลังจะมาถึงในช่วงเวลานี้")
-                
-        with col_daytypes:
-            st.subheader("📊 สัดส่วนภารกิจตามประเภทวัน")
-            day_counts = df_filtered['Day Type'].value_counts()
-            day_chart_data = pd.DataFrame({
-                "ประเภทวัน": DAY_TYPES,
-                "จำนวนภารกิจ": [int(day_counts.get(dt, 0)) for dt in DAY_TYPES]
-            })
-            st.bar_chart(
-                day_chart_data,
-                x="ประเภทวัน",
-                y="จำนวนภารกิจ",
-                color="ประเภทวัน",
-                height=280
-            )
-
-        # 4. สถิติการปฏิบัติงานรายบุคคล (Leaderboard) พร้อมกราฟแท่งแบบ Stacked และ Expander
         st.divider()
-        st.subheader("🏆 สถิติการปฏิบัติงานรายบุคคล (Leaderboard)")
+        # ==========================================
+        # งานที่กำลังจะมาถึง (Upcoming Missions)
+        # ==========================================
+        st.subheader("🚀 งานที่กำลังจะมาถึง (Upcoming Missions)")
+        
+        upcoming_df = df_filtered.copy()
+        upcoming_df['Date_Obj_DateOnly'] = pd.to_datetime(upcoming_df['Date'], errors='coerce').dt.date
+        upcoming_df = upcoming_df[upcoming_df['Date_Obj_DateOnly'] >= today]
+        
+        # เรียงลำดับจากวันที่ใกล้จะถึงที่สุดขึ้นก่อน (Ascending)
+        upcoming_df = upcoming_df.sort_values(by=['Date', 'Time'], ascending=[True, True])
+        
+        if not upcoming_df.empty:
+            upcoming_display = upcoming_df[['Date', 'Time', 'Mission Name', 'Officers']].copy()
+            upcoming_display['Date'] = upcoming_display['Date'].apply(to_thai_date)
+            upcoming_display.rename(columns={
+                "Date": "วันที่",
+                "Time": "เวลา",
+                "Mission Name": "ชื่อภารกิจ",
+                "Officers": "เจ้าหน้าที่ปฏิบัติงาน"
+            }, inplace=True)
+            
+            st.dataframe(
+                upcoming_display,
+                column_config={
+                    "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
+                    "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("🎉 ไม่มีภารกิจที่กำลังจะมาถึงในช่วงเวลานี้")
+
+        # ==========================================
+        # สถิติการปฏิบัติงาน (Leaderboard) - แบบเดิม 100%
+        # ==========================================
+        st.divider()
+        st.subheader("🏆 สถิติการปฏิบัติงาน (Leaderboard)")
         
         stats = []
         for officer in OFFICERS:
@@ -446,45 +435,31 @@ def render_dashboard(df):
             
         stats_df = pd.DataFrame(stats)
         
-        # กราฟแท่งเปรียบเทียบสถิติเจ้าหน้าที่ (เรียงตามจำนวนภารกิจรวม)
-        officers_chart_df = stats_df.sort_values(by="รวม", ascending=False).copy()
-        st.caption("📈 กราฟแสดงสัดส่วนการออกปฏิบัติงานของเจ้าหน้าที่แต่ละท่าน (แยกตามประเภทวัน)")
-        st.bar_chart(
-            officers_chart_df,
-            x="ชื่อเจ้าหน้าที่",
-            y=["ปกติ (ในเวลา)", "ปกติ (นอกเวลา)", "วันหยุด"],
-            color=["#2563EB", "#F59E0B", "#EF4444"],
-            stack=True,
-            height=360
-        )
+        def highlight_min_red(s):
+            is_min = s == s.min()
+            return ['background-color: #ffcccc; color: black' if v else '' for v in is_min]
+
+        def highlight_min_blue(s):
+            is_min = s == s.min()
+            return ['background-color: #cce5ff; color: black' if v else '' for v in is_min]
+            
+        def highlight_min_yellow(s):
+            is_min = s == s.min()
+            return ['background-color: #ffffe0; color: black' if v else '' for v in is_min]
+
+        styled_df = (stats_df.style
+                     .apply(highlight_min_red, subset=['วันหยุด'])
+                     .apply(highlight_min_blue, subset=['ทำรายงาน'])
+                     .apply(highlight_min_yellow, subset=['ปกติ (นอกเวลา)']))
         
-        # ใช้ st.expander เพื่อเก็บตารางที่มีความยาว ให้หน้าจอไม่รก
-        with st.expander("🔍 ดูตารางคะแนนสถิติรายบุคคลแบบละเอียด (พร้อมสีไฮไลท์ตามเกณฑ์)", expanded=False):
-            def highlight_min_red(s):
-                is_min = s == s.min()
-                return ['background-color: #ffcccc; color: black' if v else '' for v in is_min]
-
-            def highlight_min_blue(s):
-                is_min = s == s.min()
-                return ['background-color: #cce5ff; color: black' if v else '' for v in is_min]
-                
-            def highlight_min_yellow(s):
-                is_min = s == s.min()
-                return ['background-color: #ffffe0; color: black' if v else '' for v in is_min]
-
-            styled_df = (stats_df.style
-                         .apply(highlight_min_red, subset=['วันหยุด'])
-                         .apply(highlight_min_blue, subset=['ทำรายงาน'])
-                         .apply(highlight_min_yellow, subset=['ปกติ (นอกเวลา)']))
-            
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
-            
-            st.markdown("""
-            **คำอธิบายสีไฮไลท์ (ชี้เป้าคนที่ทำงานน้อยที่สุด เพื่อความสมดุลในการกระจายงาน):**
-            - <span style="background-color:#ffffe0; color:black; padding:2px 6px; border-radius:3px;"> สีเหลืองอ่อน </span>: ผู้ที่มีสถิติออกเวร **ปกติ (นอกเวลา)** น้อยที่สุด
-            - <span style="background-color:#ffcccc; color:black; padding:2px 6px; border-radius:3px;"> สีแดงอ่อน </span>: ผู้ที่มีสถิติออกเวร **วันหยุด** น้อยที่สุด
-            - <span style="background-color:#cce5ff; color:black; padding:2px 6px; border-radius:3px;"> สีฟ้าอ่อน </span>: ผู้ที่มีสถิติ **การทำรายงาน** น้อยที่สุด
-            """, unsafe_allow_html=True)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True, height=500)
+        
+        st.markdown("""
+        **คำอธิบายสีไฮไลท์ (ชี้เป้าคนที่ทำงานน้อยที่สุด):**
+        - <span style="background-color:#ffffe0; color:black; padding:2px 5px;"> สีเหลืองอ่อน </span>: ผู้ที่มีสถิติออกเวร **ปกติ (นอกเวลา)** น้อยที่สุด
+        - <span style="background-color:#ffcccc; color:black; padding:2px 5px;"> สีแดงอ่อน </span>: ผู้ที่มีสถิติออกเวร **วันหยุด** น้อยที่สุด
+        - <span style="background-color:#cce5ff; color:black; padding:2px 5px;"> สีฟ้าอ่อน </span>: ผู้ที่มีสถิติ **การทำรายงาน** น้อยที่สุด
+        """, unsafe_allow_html=True)
 
         # 5. ประวัติภารกิจ & ระบบติดตามรายงาน/เบิกจ่าย (มีทั้ง Interactive Editor และ Overview ไฮไลท์สี)
         st.divider()
