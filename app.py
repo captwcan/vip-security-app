@@ -673,94 +673,182 @@ elif choice == "✅ ภารกิจรอเห็นชอบ" and st.sessio
     
     if not pending_df.empty:
         st.subheader(f"รายการที่รอเห็นชอบ ({len(pending_df)} รายการ)")
+        st.caption("💡 Admin สามารถกดยืนยันเห็นชอบ, แก้ไขรายละเอียดภารกิจกรณีพิมพ์ผิด, หรือลบภารกิจได้ทันทีในหน้านี้")
         
         for idx, row in pending_df.iterrows():
             date_str = to_thai_date(row['Date'])
             time_str = str(row['Time'])[:5]
             time_display = f" เวลา {time_str}" if time_str else ""
+            m_id = row['Mission ID']
             
             with st.container(border=True):
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.markdown(f"**ภารกิจ:** {row['Mission Name']}")
-                    st.markdown(f"**วัน/เวลา:** {date_str}{time_display}")
-                    st.markdown(f"**เจ้าหน้าที่:** {row['Officers']}")
-                with col2:
-                    st.write("") # เว้นบรรทัด
-                    st.write("") 
-                    if st.button("✅ ยืนยันเห็นชอบ", key=f"app_{row['Mission ID']}", type="primary"):
-                        approve_mission(row['Mission ID'])
+                col_info, col_actions = st.columns([3.2, 1.3])
+                with col_info:
+                    st.markdown(f"#### 📌 {row['Mission Name']}")
+                    st.markdown(f"📅 **วัน/เวลา:** {date_str}{time_display} &nbsp;|&nbsp; 🏷️ **ประเภทวัน:** {row['Day Type']}")
+                    st.markdown(f"👮 **เจ้าหน้าที่:** {row['Officers']}")
+                    if row['Reporter']:
+                        st.markdown(f"📝 **ผู้ทำรายงาน:** {row['Reporter']}")
+                with col_actions:
+                    st.write("")
+                    if st.button("✅ ยืนยันเห็นชอบ", key=f"app_{m_id}", type="primary", use_container_width=True):
+                        approve_mission(m_id)
                         st.rerun()
+                    if st.button("🗑️ ลบภารกิจ", key=f"del_p_{m_id}", use_container_width=True):
+                        delete_mission(m_id)
+                        st.rerun()
+                
+                # ฟอร์มแก้ไขข้อมูลภารกิจรอเห็นชอบ (สำหรับแก้คำผิด/รายละเอียดก่อนอนุมัติ)
+                with st.expander("✏️ แก้ไขข้อมูลภารกิจนี้ (กรณีพิมพ์ผิด)", expanded=False):
+                    edit_name = st.text_area("ชื่อภารกิจ", value=row['Mission Name'], key=f"pname_{m_id}", height=80)
+                    
+                    try:
+                        curr_d = datetime.strptime(str(row['Date']), '%Y-%m-%d').date()
+                    except:
+                        curr_d = datetime.today().date()
+                        
+                    try:
+                        t_str = str(row['Time'])
+                        curr_t = datetime.strptime(t_str[:8], '%H:%M:%S').time() if t_str else datetime.now().time()
+                    except:
+                        curr_t = datetime.now().time()
+                        
+                    edit_date, p_date_error = thai_date_picker("วันที่ปฏิบัติงาน", default_date=curr_d, key_prefix=f"pdate_{m_id}")
+                    if p_date_error:
+                        st.error(p_date_error)
+                        
+                    edit_time = st.time_input("เวลานัดหมาย / เวลาปฏิบัติงาน", value=curr_t, key=f"ptime_{m_id}")
+                    
+                    dt_idx = DAY_TYPES.index(row['Day Type']) if row['Day Type'] in DAY_TYPES else 0
+                    edit_day_type = st.selectbox("ประเภทวัน", DAY_TYPES, index=dt_idx, key=f"pdt_{m_id}")
+                    
+                    c_officers = [x.strip() for x in str(row['Officers']).split(',')]
+                    v_officers = [x for x in c_officers if x in OFFICERS]
+                    edit_officers = st.multiselect("เจ้าหน้าที่ปฏิบัติงาน", OFFICERS, default=v_officers, key=f"poff_{m_id}")
+                    
+                    r_options = edit_officers if edit_officers else ["กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน"]
+                    r_idx = r_options.index(row['Reporter']) if row['Reporter'] in r_options else 0
+                    edit_reporter = st.selectbox("ผู้ทำรายงานผล", options=r_options, index=r_idx, key=f"prep_{m_id}")
+                    
+                    if st.button("💾 บันทึกการแก้ไข", key=f"psave_{m_id}", type="primary"):
+                        if not edit_name or not edit_officers:
+                            st.error("กรุณากรอกข้อมูลให้ครบถ้วน")
+                        elif p_date_error:
+                            st.error("วันที่ไม่ถูกต้อง")
+                        elif edit_reporter == "กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน":
+                            st.error("กรุณาระบุผู้ทำรายงานผล")
+                        else:
+                            update_mission(m_id, edit_name, edit_date, edit_time, edit_day_type, edit_officers, edit_reporter)
+                            time.sleep(1)
+                            st.rerun()
     else:
         st.success("🎉 ไม่มีภารกิจที่รอเห็นชอบในขณะนี้")
 
 elif choice == "✏️ การแก้ไข/ลบ" and st.session_state["is_admin"]:
-    st.header("แก้ไข / ลบ ข้อมูลภารกิจ")
+    st.header("✏️ แก้ไข / ลบ ข้อมูลภารกิจ (เฉพาะภารกิจที่อนุมัติแล้ว)")
     df = get_data()
-    if not df.empty:
-        df['Thai Date'] = df['Date'].apply(to_thai_date)
-        df['Time'] = df['Time'].fillna('').astype(str)
-        display_time = df['Time'].apply(lambda x: f" เวลา {x[:5]}" if x.strip() != "" else "")
-        
-        mission_list = df['Mission Name'] + " (" + df['Thai Date'] + display_time + ")"
-        
-        selected_mission_str = st.selectbox("เลือกภารกิจที่ต้องการจัดการ", mission_list)
-        idx = mission_list[mission_list == selected_mission_str].index[0]
-        selected_data = df.iloc[idx]
-        mission_id = selected_data['Mission ID']
-        
-        new_name = st.text_area("ชื่อภารกิจ", value=selected_data['Mission Name'], height=100)
-        
-        try:
-            current_date = datetime.strptime(str(selected_data['Date']), '%Y-%m-%d').date()
-        except:
-            current_date = datetime.today().date()
-            
-        try:
-            time_str = str(selected_data['Time'])
-            current_time = datetime.strptime(time_str[:8], '%H:%M:%S').time() if time_str else datetime.now().time()
-        except:
-            current_time = datetime.now().time()
-
-        new_date, date_error = thai_date_picker("วันที่ปฏิบัติงาน", default_date=current_date, key_prefix="edit")
-        if date_error:
-            st.error(date_error)
-            
-        new_time = st.time_input("เวลานัดหมาย / เวลาปฏิบัติงาน", value=current_time)
-        
-        new_day_type = st.selectbox("ประเภทวัน", DAY_TYPES, index=DAY_TYPES.index(selected_data['Day Type']) if selected_data['Day Type'] in DAY_TYPES else 0)
-        
-        current_officers = [x.strip() for x in str(selected_data['Officers']).split(',')]
-        valid_current_officers = [x for x in current_officers if x in OFFICERS]
-        new_officers = st.multiselect("เจ้าหน้าที่ปฏิบัติงาน (แก้ไข)", OFFICERS, default=valid_current_officers)
-        
-        options_for_reporter = new_officers if new_officers else ["กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน"]
-        if selected_data['Reporter'] in options_for_reporter:
-            default_reporter_idx = options_for_reporter.index(selected_data['Reporter'])
-        else:
-            default_reporter_idx = 0
-            
-        new_reporter = st.selectbox("ผู้ทำรายงานผล (แก้ไข)", options=options_for_reporter, index=default_reporter_idx)
-        
-        col_btn1, col_btn2 = st.columns([1, 5])
-        with col_btn1:
-            update_btn = st.button("💾 บันทึกการแก้ไข", type="primary")
-        with col_btn2:
-            delete_btn = st.button("🗑️ ลบภารกิจนี้")
-            
-        if delete_btn:
-            delete_mission(mission_id)
-            st.rerun()
-            
-        if update_btn:
-            if options_for_reporter[0] == "กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน":
-                 st.error("กรุณาระบุเจ้าหน้าที่และผู้ทำรายงานผล")
-            elif date_error:
-                 st.error("ไม่สามารถบันทึกการแก้ไขได้ กรุณาตรวจสอบวันที่ให้ถูกต้อง")
-            else:
-                 update_mission(mission_id, new_name, new_date, new_time, new_day_type, new_officers, new_reporter)
+    
+    # 1. แยกตามสถานะอย่างเด็ดขาด: ดึงเฉพาะภารกิจที่มีสถานะ "อนุมัติแล้ว" เท่านั้น
+    approved_df = df[df['Approval Status'] == 'อนุมัติแล้ว'].copy()
+    
+    if approved_df.empty:
+        st.info("ยังไม่มีข้อมูลภารกิจที่ได้รับการอนุมัติในระบบ")
     else:
-        st.info("ยังไม่มีข้อมูลภารกิจในระบบ")
+        approved_df['Date_Obj'] = pd.to_datetime(approved_df['Date'], errors='coerce').dt.date
+        available_dates = sorted(approved_df['Date_Obj'].dropna().unique(), reverse=True)
+        
+        # 2. ระบบกรองข้อมูล 2 ชั้น: เลือกวันที่ก่อน เพื่อลดความยาวของ Dropdown
+        st.subheader("🔍 ค้นหาภารกิจที่ต้องการจัดการ")
+        
+        today = datetime.today().date()
+        default_search_date = today if today in available_dates else (available_dates[0] if len(available_dates) > 0 else today)
+        
+        col_step1, col_step2 = st.columns([1, 1.8])
+        with col_step1:
+            search_date = st.date_input("1. เลือกวันที่ปฏิบัติงาน", value=default_search_date)
+            
+        missions_on_date = approved_df[approved_df['Date_Obj'] == search_date].copy()
+        
+        with col_step2:
+            if not missions_on_date.empty:
+                missions_on_date = missions_on_date.sort_values(by=['Time'], ascending=True)
+                mission_options = {}
+                for i, (_, m_row) in enumerate(missions_on_date.iterrows(), start=1):
+                    time_part = f" เวลา {str(m_row['Time'])[:5]}" if pd.notna(m_row['Time']) and str(m_row['Time']).strip() else ""
+                    label = f"{i}. {m_row['Mission Name']}{time_part} ({m_row['Day Type']})"
+                    mission_options[label] = m_row['Mission ID']
+                
+                selected_label = st.selectbox(
+                    f"2. เลือกภารกิจในวันที่ {to_thai_date(search_date)} (พบ {len(missions_on_date)} รายการ)",
+                    options=list(mission_options.keys())
+                )
+                selected_mission_id = mission_options[selected_label]
+                selected_data = missions_on_date[missions_on_date['Mission ID'] == selected_mission_id].iloc[0]
+            else:
+                st.warning(f"⚠️ ไม่พบภารกิจ (ที่อนุมัติแล้ว) ในวันที่ {to_thai_date(search_date)}")
+                selected_data = None
+                if available_dates:
+                    recent_thai = [to_thai_date(d) for d in available_dates[:4]]
+                    st.caption(f"💡 วันที่มีภารกิจล่าสุดในระบบ: {', '.join(recent_thai)}")
+
+        # แสดงฟอร์มแก้ไขข้อมูลเมื่อเลือกภารกิจแล้ว
+        if selected_data is not None:
+            st.divider()
+            st.subheader(f"✍️ ฟอร์มแก้ไขข้อมูลภารกิจ: {selected_data['Mission Name']}")
+            
+            new_name = st.text_area("ชื่อภารกิจ", value=selected_data['Mission Name'], height=100)
+            
+            try:
+                current_date = datetime.strptime(str(selected_data['Date']), '%Y-%m-%d').date()
+            except:
+                current_date = datetime.today().date()
+                
+            try:
+                time_str = str(selected_data['Time'])
+                current_time = datetime.strptime(time_str[:8], '%H:%M:%S').time() if time_str else datetime.now().time()
+            except:
+                current_time = datetime.now().time()
+
+            new_date, date_error = thai_date_picker("วันที่ปฏิบัติงาน", default_date=current_date, key_prefix="edit")
+            if date_error:
+                st.error(date_error)
+                
+            new_time = st.time_input("เวลานัดหมาย / เวลาปฏิบัติงาน", value=current_time)
+            
+            new_day_type = st.selectbox("ประเภทวัน", DAY_TYPES, index=DAY_TYPES.index(selected_data['Day Type']) if selected_data['Day Type'] in DAY_TYPES else 0)
+            
+            current_officers = [x.strip() for x in str(selected_data['Officers']).split(',')]
+            valid_current_officers = [x for x in current_officers if x in OFFICERS]
+            new_officers = st.multiselect("เจ้าหน้าที่ปฏิบัติงาน (แก้ไข)", OFFICERS, default=valid_current_officers)
+            
+            options_for_reporter = new_officers if new_officers else ["กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน"]
+            if selected_data['Reporter'] in options_for_reporter:
+                default_reporter_idx = options_for_reporter.index(selected_data['Reporter'])
+            else:
+                default_reporter_idx = 0
+                
+            new_reporter = st.selectbox("ผู้ทำรายงานผล (แก้ไข)", options=options_for_reporter, index=default_reporter_idx)
+            
+            col_btn1, col_btn2 = st.columns([1, 4])
+            with col_btn1:
+                update_btn = st.button("💾 บันทึกการแก้ไข", type="primary")
+            with col_btn2:
+                delete_btn = st.button("🗑️ ลบภารกิจนี้")
+                
+            if delete_btn:
+                delete_mission(selected_mission_id)
+                time.sleep(1)
+                st.rerun()
+                
+            if update_btn:
+                if options_for_reporter[0] == "กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน":
+                     st.error("กรุณาระบุเจ้าหน้าที่และผู้ทำรายงานผล")
+                elif date_error:
+                     st.error("ไม่สามารถบันทึกการแก้ไขได้ กรุณาตรวจสอบวันที่ให้ถูกต้อง")
+                else:
+                     update_mission(selected_mission_id, new_name, new_date, new_time, new_day_type, new_officers, new_reporter)
+                     time.sleep(1)
+                     st.rerun()
 
 elif choice == "📊 ข้อมูลภารกิจ VIP Protection":
     st.header("📊 สถิติภารกิจรักษาความปลอดภัย (Dashboard)")
