@@ -71,6 +71,7 @@ OFFICERS = [
 ]
 
 DAY_TYPES = ["วันทำงานปกติ (ในเวลา)", "วันทำงานปกติ (นอกเวลา)", "วันหยุด"]
+DRESS_CODES = ["ชุดขาวปกติ", "ชุดขาวเต็มยศ", "ชุดสูท", "ชุดยุทธวิธี"]
 
 THAI_MONTHS = [
     "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -119,7 +120,7 @@ sheet = init_connection_v3()
 @st.cache_data(ttl=60)
 def get_data():
     if sheet is None:
-        return pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details", "Approval Status"])
+        return pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details", "Approval Status", "Dress Code"])
     else:
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
@@ -128,6 +129,11 @@ def get_data():
             if 'Report Status' not in df.columns: df['Report Status'] = 'ยังไม่ส่ง'
             if 'Additional Details' not in df.columns: df['Additional Details'] = ''
             if 'Approval Status' not in df.columns: df['Approval Status'] = 'อนุมัติแล้ว'
+            if 'Dress Code' not in df.columns:
+                if 'การแต่งกาย' in df.columns:
+                    df['Dress Code'] = df['การแต่งกาย']
+                else:
+                    df['Dress Code'] = 'ชุดสูท'
             
             # เติมค่าให้แถวเก่าที่ช่องใหม่ยังว่างอยู่
             df['Report Status'] = df['Report Status'].replace('', 'ยังไม่ส่ง')
@@ -135,8 +141,10 @@ def get_data():
             df['Approval Status'] = df['Approval Status'].replace('', 'อนุมัติแล้ว')
             df['Approval Status'] = df['Approval Status'].fillna('อนุมัติแล้ว').astype(str)
             df['Additional Details'] = df['Additional Details'].fillna('').astype(str)
+            df['Dress Code'] = df['Dress Code'].replace('', 'ชุดสูท')
+            df['Dress Code'] = df['Dress Code'].fillna('ชุดสูท').astype(str)
         else:
-            df = pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details", "Approval Status"])
+            df = pd.DataFrame(columns=["Mission ID", "Mission Name", "Date", "Time", "Day Type", "Officers", "Reporter", "Report Status", "Additional Details", "Approval Status", "Dress Code"])
         
         # จัดการข้อมูลเก่าใน DB ให้ตรงกับประเภทใหม่
         if not df.empty and 'Day Type' in df.columns:
@@ -207,7 +215,7 @@ def thai_date_picker(label, default_date=None, key_prefix=""):
     except ValueError:
         return None, "รูปแบบวันที่ไม่ถูกต้อง (เช่น 31 กุมภาพันธ์)"
 
-def add_mission(name, date, time_val, day_type, officers, reporter):
+def add_mission(name, date, time_val, day_type, officers, reporter, dress_code="ชุดสูท"):
     if not sheet:
         st.error("ไม่สามารถบันทึกได้: ยังไม่ได้เชื่อมต่อ Google Sheets")
         return
@@ -222,13 +230,14 @@ def add_mission(name, date, time_val, day_type, officers, reporter):
     today = datetime.today().date()
     approval_status = "รอเห็นชอบ" if date > today else "อนุมัติแล้ว"
     
-    row = [mission_id, name, str(date), str(time_val), day_type, officers_str, clean_reporter, "ยังไม่ส่ง", "", approval_status]
+    # Col 1-11: ID, Name, Date, Time, Day Type, Officers, Reporter, Report Status, Details, Approval, Dress Code
+    row = [mission_id, name, str(date), str(time_val), day_type, officers_str, clean_reporter, "ยังไม่ส่ง", "", approval_status, dress_code]
     
     sheet.append_row(row)
     st.cache_data.clear()
     st.success("บันทึกข้อมูลลง Google Sheets สำเร็จ!")
 
-def update_mission(mission_id, name, date, time_val, day_type, officers, reporter):
+def update_mission(mission_id, name, date, time_val, day_type, officers, reporter, dress_code="ชุดสูท"):
     if not sheet:
         st.error("ไม่สามารถอัปเดตได้: ยังไม่ได้เชื่อมต่อ Google Sheets")
         return
@@ -241,6 +250,7 @@ def update_mission(mission_id, name, date, time_val, day_type, officers, reporte
     if cell:
         row_idx = cell.row
         sheet.update(f"B{row_idx}:G{row_idx}", [[name, str(date), str(time_val), day_type, officers_str, clean_reporter]])
+        sheet.update_cell(row_idx, 11, str(dress_code))
         st.cache_data.clear()
         st.success("อัปเดตข้อมูลใน Google Sheets สำเร็จ!")
 
@@ -388,20 +398,24 @@ def render_dashboard(df):
         upcoming_df = upcoming_df.sort_values(by=['Date', 'Time'], ascending=[True, True])
         
         if not upcoming_df.empty:
-            upcoming_display = upcoming_df[['Date', 'Time', 'Mission Name', 'Officers']].copy()
+            upcoming_display = upcoming_df[['Date', 'Time', 'Mission Name', 'Dress Code', 'Officers', 'Reporter']].copy()
             upcoming_display['Date'] = upcoming_display['Date'].apply(to_thai_date)
             upcoming_display.rename(columns={
                 "Date": "วันที่",
                 "Time": "เวลา",
                 "Mission Name": "ชื่อภารกิจ",
-                "Officers": "เจ้าหน้าที่ปฏิบัติงาน"
+                "Dress Code": "การแต่งกาย",
+                "Officers": "เจ้าหน้าที่ปฏิบัติงาน",
+                "Reporter": "เจ้าหน้าที่ผู้ทำรายงาน"
             }, inplace=True)
             
             st.dataframe(
                 upcoming_display,
                 column_config={
                     "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
-                    "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large")
+                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width="medium"),
+                    "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large"),
+                    "เจ้าหน้าที่ผู้ทำรายงาน": st.column_config.TextColumn("เจ้าหน้าที่ผู้ทำรายงาน", width="medium")
                 },
                 use_container_width=True,
                 hide_index=True
@@ -466,7 +480,7 @@ def render_dashboard(df):
         st.divider()
         st.subheader("📋 ประวัติภารกิจและการติดตามรายงาน")
         
-        history_df = df_filtered[['Mission ID', 'Mission Name', 'Date', 'Time', 'Day Type', 'Officers', 'Reporter', 'Report Status', 'Additional Details']].copy()
+        history_df = df_filtered[['Mission ID', 'Mission Name', 'Date', 'Time', 'Day Type', 'Dress Code', 'Officers', 'Reporter', 'Report Status', 'Additional Details']].copy()
         history_df.reset_index(drop=True, inplace=True)
         history_df['Date'] = history_df['Date'].apply(to_thai_date)
         history_df.rename(columns={
@@ -474,6 +488,7 @@ def render_dashboard(df):
             "Date": "วันที่",
             "Time": "เวลา",
             "Day Type": "ประเภทวัน",
+            "Dress Code": "การแต่งกาย",
             "Officers": "เจ้าหน้าที่ปฏิบัติงาน",
             "Reporter": "ผู้ทำรายงานผล",
             "Report Status": "สถานะรายงาน",
@@ -496,6 +511,7 @@ def render_dashboard(df):
                     "วันที่": st.column_config.TextColumn("วันที่", disabled=True),
                     "เวลา": st.column_config.TextColumn("เวลา", disabled=True),
                     "ประเภทวัน": st.column_config.TextColumn("ประเภทวัน", disabled=True),
+                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width="medium", disabled=True),
                     "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large", disabled=True),
                     "ผู้ทำรายงานผล": st.column_config.TextColumn("ผู้ทำรายงานผล", disabled=True),
                     "สถานะรายงาน": st.column_config.SelectboxColumn("สถานะรายงาน", options=["ยังไม่ส่ง", "ส่งแล้ว"], disabled=False),
@@ -528,13 +544,14 @@ def render_dashboard(df):
                         st.rerun()
                         
         with tab_overview:
-            overview_df = df_filtered[['Date', 'Time', 'Mission Name', 'Officers', 'Reporter', 'Report Status', 'Additional Details', 'Approval Status']].copy()
+            overview_df = df_filtered[['Date', 'Time', 'Mission Name', 'Dress Code', 'Officers', 'Reporter', 'Report Status', 'Additional Details', 'Approval Status']].copy()
             overview_df.reset_index(drop=True, inplace=True)
             overview_df['Date'] = overview_df['Date'].apply(to_thai_date)
             overview_df.rename(columns={
                 "Mission Name": "ชื่อภารกิจ",
                 "Date": "วันที่",
                 "Time": "เวลา",
+                "Dress Code": "การแต่งกาย",
                 "Officers": "เจ้าหน้าที่ปฏิบัติงาน",
                 "Reporter": "ผู้ทำรายงาน",
                 "Report Status": "สถานะรายงาน",
@@ -628,6 +645,7 @@ if choice == "📝 ลงข้อมูลภารกิจ" and st.session_st
             
         time_val = st.time_input("เวลานัดหมาย / เวลาปฏิบัติงาน")
         day_type = st.selectbox("ประเภทวัน", DAY_TYPES)
+        dress_code = st.selectbox("การแต่งกาย", DRESS_CODES)
         
         officer_stats = {}
         for officer in OFFICERS:
@@ -660,7 +678,7 @@ if choice == "📝 ลงข้อมูลภารกิจ" and st.session_st
             elif reporter == "กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน":
                 st.error("กรุณาระบุผู้ทำรายงานผล")
             else:
-                add_mission(mission_name, date, time_val, day_type, selected_dynamic_officers, reporter)
+                add_mission(mission_name, date, time_val, day_type, selected_dynamic_officers, reporter, dress_code)
                 st.rerun()
 
     with col_right:
@@ -686,7 +704,7 @@ elif choice == "✅ ภารกิจรอเห็นชอบ" and st.sessio
                 col_info, col_actions = st.columns([3.2, 1.3])
                 with col_info:
                     st.markdown(f"#### 📌 {row['Mission Name']}")
-                    st.markdown(f"📅 **วัน/เวลา:** {date_str}{time_display} &nbsp;|&nbsp; 🏷️ **ประเภทวัน:** {row['Day Type']}")
+                    st.markdown(f"📅 **วัน/เวลา:** {date_str}{time_display} &nbsp;|&nbsp; 🏷️ **ประเภทวัน:** {row['Day Type']} &nbsp;|&nbsp; 👔 **การแต่งกาย:** {row.get('Dress Code', 'ชุดสูท')}")
                     st.markdown(f"👮 **เจ้าหน้าที่:** {row['Officers']}")
                     if row['Reporter']:
                         st.markdown(f"📝 **ผู้ทำรายงาน:** {row['Reporter']}")
@@ -723,6 +741,10 @@ elif choice == "✅ ภารกิจรอเห็นชอบ" and st.sessio
                     dt_idx = DAY_TYPES.index(row['Day Type']) if row['Day Type'] in DAY_TYPES else 0
                     edit_day_type = st.selectbox("ประเภทวัน", DAY_TYPES, index=dt_idx, key=f"pdt_{m_id}")
                     
+                    curr_dc = row.get('Dress Code', 'ชุดสูท')
+                    dc_idx = DRESS_CODES.index(curr_dc) if curr_dc in DRESS_CODES else 2
+                    edit_dress_code = st.selectbox("การแต่งกาย", DRESS_CODES, index=dc_idx, key=f"pdc_{m_id}")
+                    
                     c_officers = [x.strip() for x in str(row['Officers']).split(',')]
                     v_officers = [x for x in c_officers if x in OFFICERS]
                     edit_officers = st.multiselect("เจ้าหน้าที่ปฏิบัติงาน", OFFICERS, default=v_officers, key=f"poff_{m_id}")
@@ -739,7 +761,7 @@ elif choice == "✅ ภารกิจรอเห็นชอบ" and st.sessio
                         elif edit_reporter == "กรุณาเลือกเจ้าหน้าที่ปฏิบัติงานก่อน":
                             st.error("กรุณาระบุผู้ทำรายงานผล")
                         else:
-                            update_mission(m_id, edit_name, edit_date, edit_time, edit_day_type, edit_officers, edit_reporter)
+                            update_mission(m_id, edit_name, edit_date, edit_time, edit_day_type, edit_officers, edit_reporter, edit_dress_code)
                             time.sleep(1)
                             st.rerun()
     else:
@@ -776,7 +798,8 @@ elif choice == "✏️ การแก้ไข/ลบ" and st.session_state["is
                 mission_options = {}
                 for i, (_, m_row) in enumerate(missions_on_date.iterrows(), start=1):
                     time_part = f" เวลา {str(m_row['Time'])[:5]}" if pd.notna(m_row['Time']) and str(m_row['Time']).strip() else ""
-                    label = f"{i}. {m_row['Mission Name']}{time_part} ({m_row['Day Type']})"
+                    dress_part = f" | {m_row.get('Dress Code', 'ชุดสูท')}" if pd.notna(m_row.get('Dress Code')) and str(m_row.get('Dress Code')).strip() else ""
+                    label = f"{i}. {m_row['Mission Name']}{time_part} ({m_row['Day Type']}{dress_part})"
                     mission_options[label] = m_row['Mission ID']
                 
                 selected_label = st.selectbox(
@@ -818,6 +841,10 @@ elif choice == "✏️ การแก้ไข/ลบ" and st.session_state["is
             
             new_day_type = st.selectbox("ประเภทวัน", DAY_TYPES, index=DAY_TYPES.index(selected_data['Day Type']) if selected_data['Day Type'] in DAY_TYPES else 0)
             
+            current_dc = selected_data['Dress Code'] if 'Dress Code' in selected_data and selected_data['Dress Code'] else 'ชุดสูท'
+            dc_idx = DRESS_CODES.index(current_dc) if current_dc in DRESS_CODES else 2
+            new_dress_code = st.selectbox("การแต่งกาย", DRESS_CODES, index=dc_idx)
+            
             current_officers = [x.strip() for x in str(selected_data['Officers']).split(',')]
             valid_current_officers = [x for x in current_officers if x in OFFICERS]
             new_officers = st.multiselect("เจ้าหน้าที่ปฏิบัติงาน (แก้ไข)", OFFICERS, default=valid_current_officers)
@@ -847,7 +874,7 @@ elif choice == "✏️ การแก้ไข/ลบ" and st.session_state["is
                 elif date_error:
                      st.error("ไม่สามารถบันทึกการแก้ไขได้ กรุณาตรวจสอบวันที่ให้ถูกต้อง")
                 else:
-                     update_mission(selected_mission_id, new_name, new_date, new_time, new_day_type, new_officers, new_reporter)
+                     update_mission(selected_mission_id, new_name, new_date, new_time, new_day_type, new_officers, new_reporter, new_dress_code)
                      time.sleep(1)
                      st.rerun()
 
