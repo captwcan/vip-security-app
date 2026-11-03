@@ -473,12 +473,12 @@ def render_dashboard(df):
         st.dataframe(
             styled_df,
             column_config={
-                "ชื่อเจ้าหน้าที่": st.column_config.TextColumn("ชื่อเจ้าหน้าที่", width="large"),
-                "รวม": st.column_config.NumberColumn("รวม", width=70),
-                "ปกติ (ในเวลา)": st.column_config.NumberColumn("ปกติ (ในเวลา)", width=105),
-                "ปกติ (นอกเวลา)": st.column_config.NumberColumn("ปกติ (นอกเวลา)", width=115),
-                "วันหยุด": st.column_config.NumberColumn("วันหยุด", width=85),
-                "ทำรายงาน": st.column_config.NumberColumn("ทำรายงาน", width=90)
+                "ชื่อเจ้าหน้าที่": st.column_config.TextColumn("ชื่อเจ้าหน้าที่", width=220),
+                "รวม": st.column_config.NumberColumn("รวม", width=75, alignment="center"),
+                "ปกติ (ในเวลา)": st.column_config.NumberColumn("ปกติ (ในเวลา)", width=105, alignment="center"),
+                "ปกติ (นอกเวลา)": st.column_config.NumberColumn("ปกติ (นอกเวลา)", width=115, alignment="center"),
+                "วันหยุด": st.column_config.NumberColumn("วันหยุด", width=85, alignment="center"),
+                "ทำรายงาน": st.column_config.NumberColumn("ทำรายงาน", width=90, alignment="center")
             },
             use_container_width=True,
             hide_index=True,
@@ -497,8 +497,10 @@ def render_dashboard(df):
         st.subheader("📋 ประวัติภารกิจและการติดตามรายงาน")
         
         history_df = df_filtered[['Mission ID', 'Mission Name', 'Date', 'Time', 'Day Type', 'Dress Code', 'Officers', 'Reporter', 'Report Status', 'Additional Details']].copy()
+        history_df = history_df.sort_values(by=['Date', 'Time'], ascending=[True, True])
         history_df.reset_index(drop=True, inplace=True)
         history_df['Date'] = history_df['Date'].apply(to_thai_date)
+        history_df['Time'] = history_df['Time'].fillna('').astype(str).apply(lambda x: x[:5] if x else "")
         history_df.rename(columns={
             "Mission Name": "ชื่อภารกิจ",
             "Date": "วันที่",
@@ -561,8 +563,10 @@ def render_dashboard(df):
                         
         with tab_overview:
             overview_df = df_filtered[['Date', 'Time', 'Mission Name', 'Dress Code', 'Officers', 'Reporter', 'Report Status', 'Additional Details', 'Approval Status']].copy()
+            overview_df = overview_df.sort_values(by=['Date', 'Time'], ascending=[True, True])
             overview_df.reset_index(drop=True, inplace=True)
             overview_df['Date'] = overview_df['Date'].apply(to_thai_date)
+            overview_df['Time'] = overview_df['Time'].fillna('').astype(str).apply(lambda x: x[:5] if x else "")
             overview_df.rename(columns={
                 "Mission Name": "ชื่อภารกิจ",
                 "Date": "วันที่",
