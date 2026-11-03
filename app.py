@@ -400,6 +400,7 @@ def render_dashboard(df):
         if not upcoming_df.empty:
             upcoming_display = upcoming_df[['Date', 'Time', 'Mission Name', 'Dress Code', 'Officers', 'Reporter']].copy()
             upcoming_display['Date'] = upcoming_display['Date'].apply(to_thai_date)
+            upcoming_display['Time'] = upcoming_display['Time'].fillna('').astype(str).apply(lambda x: x[:5] if x else "")
             upcoming_display.rename(columns={
                 "Date": "วันที่",
                 "Time": "เวลา",
@@ -412,10 +413,12 @@ def render_dashboard(df):
             st.dataframe(
                 upcoming_display,
                 column_config={
+                    "วันที่": st.column_config.TextColumn("วันที่", width="small"),
+                    "เวลา": st.column_config.TextColumn("เวลา", width="small"),
                     "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
-                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width="medium"),
+                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width="small"),
                     "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large"),
-                    "เจ้าหน้าที่ผู้ทำรายงาน": st.column_config.TextColumn("เจ้าหน้าที่ผู้ทำรายงาน", width="medium")
+                    "เจ้าหน้าที่ผู้ทำรายงาน": st.column_config.TextColumn("เจ้าหน้าที่ผู้ทำรายงาน", width="small")
                 },
                 use_container_width=True,
                 hide_index=True
@@ -511,7 +514,7 @@ def render_dashboard(df):
                     "วันที่": st.column_config.TextColumn("วันที่", disabled=True),
                     "เวลา": st.column_config.TextColumn("เวลา", disabled=True),
                     "ประเภทวัน": st.column_config.TextColumn("ประเภทวัน", disabled=True),
-                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width="medium", disabled=True),
+                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width="small", disabled=True),
                     "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large", disabled=True),
                     "ผู้ทำรายงานผล": st.column_config.TextColumn("ผู้ทำรายงานผล", disabled=True),
                     "สถานะรายงาน": st.column_config.SelectboxColumn("สถานะรายงาน", options=["ยังไม่ส่ง", "ส่งแล้ว"], disabled=False),
