@@ -413,12 +413,12 @@ def render_dashboard(df):
             st.dataframe(
                 upcoming_display,
                 column_config={
-                    "วันที่": st.column_config.TextColumn("วันที่", width="small"),
-                    "เวลา": st.column_config.TextColumn("เวลา", width="small"),
+                    "วันที่": st.column_config.TextColumn("วันที่", width=115),
+                    "เวลา": st.column_config.TextColumn("เวลา", width=65),
                     "ชื่อภารกิจ": st.column_config.TextColumn("ชื่อภารกิจ", width="large"),
-                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width="small"),
+                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width=95),
                     "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large"),
-                    "เจ้าหน้าที่ผู้ทำรายงาน": st.column_config.TextColumn("เจ้าหน้าที่ผู้ทำรายงาน", width="small")
+                    "เจ้าหน้าที่ผู้ทำรายงาน": st.column_config.TextColumn("เจ้าหน้าที่ผู้ทำรายงาน", width=150)
                 },
                 use_container_width=True,
                 hide_index=True
@@ -470,7 +470,20 @@ def render_dashboard(df):
                      .apply(highlight_min_blue, subset=['ทำรายงาน'])
                      .apply(highlight_min_yellow, subset=['ปกติ (นอกเวลา)']))
         
-        st.dataframe(styled_df, use_container_width=True, hide_index=True, height=500)
+        st.dataframe(
+            styled_df,
+            column_config={
+                "ชื่อเจ้าหน้าที่": st.column_config.TextColumn("ชื่อเจ้าหน้าที่", width="large"),
+                "รวม": st.column_config.NumberColumn("รวม", width=70),
+                "ปกติ (ในเวลา)": st.column_config.NumberColumn("ปกติ (ในเวลา)", width=105),
+                "ปกติ (นอกเวลา)": st.column_config.NumberColumn("ปกติ (นอกเวลา)", width=115),
+                "วันหยุด": st.column_config.NumberColumn("วันหยุด", width=85),
+                "ทำรายงาน": st.column_config.NumberColumn("ทำรายงาน", width=90)
+            },
+            use_container_width=True,
+            hide_index=True,
+            height=500
+        )
         
         st.markdown("""
         **คำอธิบายสีไฮไลท์ (ชี้เป้าคนที่ทำงานน้อยที่สุด):**
@@ -514,7 +527,7 @@ def render_dashboard(df):
                     "วันที่": st.column_config.TextColumn("วันที่", disabled=True),
                     "เวลา": st.column_config.TextColumn("เวลา", disabled=True),
                     "ประเภทวัน": st.column_config.TextColumn("ประเภทวัน", disabled=True),
-                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width="small", disabled=True),
+                    "การแต่งกาย": st.column_config.TextColumn("การแต่งกาย", width=95, disabled=True),
                     "เจ้าหน้าที่ปฏิบัติงาน": st.column_config.TextColumn("เจ้าหน้าที่ปฏิบัติงาน", width="large", disabled=True),
                     "ผู้ทำรายงานผล": st.column_config.TextColumn("ผู้ทำรายงานผล", disabled=True),
                     "สถานะรายงาน": st.column_config.SelectboxColumn("สถานะรายงาน", options=["ยังไม่ส่ง", "ส่งแล้ว"], disabled=False),
