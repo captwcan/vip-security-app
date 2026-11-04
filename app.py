@@ -642,7 +642,7 @@ with st.sidebar:
     
     # ถ้าเป็น Admin จะเห็นครบทุกเมนู, ถ้าไม่ใช่จะเห็นแค่ Dashboard
     if st.session_state["is_admin"]:
-        menu = ["📊 ข้อมูลภารกิจ VIP Protection", "📝 ลงข้อมูลภารกิจ", "✅ ภารกิจรอเห็นชอบ", "✏️ การแก้ไข/ลบ"]
+        menu = ["📊 ข้อมูลภารกิจ VIP Protection", "📝 ลงข้อมูลภารกิจ", "✅ ภารกิจรอเห็นชอบ", "✏️ การแก้ไข/ลบ", "🔔 แจ้งเตือน LINE"]
     else:
         menu = ["📊 ข้อมูลภารกิจ VIP Protection"]
         
@@ -897,6 +897,78 @@ elif choice == "✏️ การแก้ไข/ลบ" and st.session_state["is
                      update_mission(selected_mission_id, new_name, new_date, new_time, new_day_type, new_officers, new_reporter, new_dress_code)
                      time.sleep(1)
                      st.rerun()
+
+elif choice == "🔔 แจ้งเตือน LINE" and st.session_state["is_admin"]:
+    st.header("🔔 ระบบส่งแจ้งเตือนภารกิจเข้ากลุ่ม LINE (Admin)")
+    
+    st.markdown("""
+    <div style="background-color: #F1F5F9; padding: 15px 20px; border-radius: 10px; border-left: 5px solid #1E3A8A; margin-bottom: 20px;">
+        <h4 style="margin: 0; color: #1E3A8A;">🛡️ สถานะการเชื่อมต่อ LINE Messaging API</h4>
+        <p style="margin: 5px 0 0 0; color: #475569; font-size: 14px;">
+            • <b>บอท:</b> VIP Protection NACC (<code>@312kkkxs</code>)<br>
+            • <b>กลุ่มเป้าหมาย:</b> เชื่อมต่อกลุ่มสำเร็จแล้ว<br>
+            • <b>ระบบแจ้งเตือนอัตโนมัติ:</b> ทุกวัน เวลา 16:30 น. (แจ้งเตือนภารกิจวันพรุ่งนี้ที่อนุมัติแล้ว)
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    df = get_data()
+    
+    col1, col2 = st.columns([1, 1.3])
+    
+    with col1:
+        st.subheader("⚙️ ตัวเลือกการส่งแจ้งเตือน")
+        
+        today_bkk = datetime.now().date()
+        from datetime import timedelta
+        tomorrow_bkk = today_bkk + timedelta(days=1)
+        
+        target_mode = st.radio("เลือกวันที่ต้องการแจ้งเตือน:", ["วันพรุ่งนี้", "วันนี้", "กำหนดวันที่เอง"])
+        
+        if target_mode == "วันพรุ่งนี้":
+            selected_date = tomorrow_bkk
+        elif target_mode == "วันนี้":
+            selected_date = today_bkk
+        else:
+            selected_date = st.date_input("เลือกวันที่", value=tomorrow_bkk)
+            
+        is_tomorrow = (selected_date == tomorrow_bkk)
+        
+        st.divider()
+        
+        btn_send = st.button("🚀 ส่งข้อความแจ้งเตือนเข้ากลุ่ม LINE ทันที", type="primary", use_container_width=True)
+        btn_test = st.button("🧪 ส่งข้อความทดสอบระบบ (Test Ping)", use_container_width=True)
+        
+    with col2:
+        st.subheader("👁️ ข้อความที่จะส่ง (Preview)")
+        
+        records = df.to_dict('records') if not df.empty else []
+        from notify_line import build_notification_message, send_line_push
+        preview_text = build_notification_message(selected_date, records, is_tomorrow=is_tomorrow)
+        
+        st.text_area("ตัวอย่างข้อความ", value=preview_text or "", height=320, disabled=True)
+        
+    if btn_send:
+        with st.spinner("กำลังส่งข้อความเข้ากลุ่ม LINE..."):
+            from notify_line import build_notification_message, send_line_push
+            records = df.to_dict('records') if not df.empty else []
+            msg = build_notification_message(selected_date, records, is_tomorrow=is_tomorrow)
+            success = send_line_push(msg)
+            if success:
+                st.success("🎉 ส่งข้อความแจ้งเตือนเข้ากลุ่ม LINE สำเร็จเรียบร้อยแล้ว!")
+            else:
+                st.error("❌ ไม่สามารถส่งข้อความได้ กรุณาตรวจสอบการตั้งค่า")
+                
+    if btn_test:
+        with st.spinner("กำลังส่งข้อความทดสอบ..."):
+            from notify_line import send_line_push
+            th_now_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            test_msg = f"🔔 [ทดสอบระบบ] การเชื่อมต่อ VIP Protection NACC\n⏰ วันที่-เวลา: {th_now_str}\n✅ ระบบทำงานปกติพร้อมส่งแจ้งเตือนครับ!"
+            success = send_line_push(test_msg)
+            if success:
+                st.success("🎉 ส่งข้อความทดสอบเข้ากลุ่ม LINE สำเร็จเรียบร้อยแล้ว!")
+            else:
+                st.error("❌ ไม่สามารถส่งข้อความได้ กรุณาตรวจสอบการตั้งค่า")
 
 elif choice == "📊 ข้อมูลภารกิจ VIP Protection":
     st.header("📊 สถิติภารกิจรักษาความปลอดภัย (Dashboard)")
