@@ -1,0 +1,30 @@
+name: Daily VIP Mission LINE Notification
+
+on:
+  schedule:
+    # 09:30 UTC = 16:30 ICT (เวลาประเทศไทย ทุกวัน)
+    - cron: '30 9 * * *'
+  workflow_dispatch: # ปุ่มกดสั่งรันด้วยตัวเองได้ตลอดเวลา
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas gspread google-auth requests
+
+      - name: Run LINE Notification Script
+        env:
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+        run: |
+          python notify_line.py
